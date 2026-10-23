@@ -13,14 +13,14 @@
   <link rel="stylesheet" href="src/app.css" />
 </head>
 <body>
-  <!-- Start -->
-  <section class="screen start" id="start" aria-label="Aera">
+  <!-- Fallback when the camera can't start -->
+  <section class="screen start" id="start" aria-label="Aera" hidden>
     <div class="start-inner">
       <h1 class="wordmark">AERA</h1>
       <p class="pitch">Your camera captures what a place looks like. This one captures the air, too.</p>
       <p class="notice" id="notice" role="status" hidden></p>
       <div class="actions">
-        <button class="btn primary" id="openCamera">Open camera</button>
+        <button class="btn primary" id="openCamera">Try the camera again</button>
         <button class="btn ghost" data-pick>Choose a photo</button>
       </div>
       <p class="fine">Photos stay on your device.</p>
@@ -28,12 +28,13 @@
   </section>
 
   <!-- Camera -->
-  <section class="screen camera" id="camera" aria-label="Camera" hidden>
+  <section class="screen camera" id="camera" aria-label="Camera">
     <div class="viewfinder">
       <video id="video" playsinline muted aria-label="Camera preview"></video>
-      <button class="icon-btn close" id="closeCamera" aria-label="Close camera">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-      </button>
+      <div class="vf-wait" aria-hidden="true">
+        <span class="wordmark small">AERA</span>
+        <span>Allow the camera to start</span>
+      </div>
     </div>
     <div class="camera-bar">
       <button class="icon-btn" data-pick aria-label="Choose a photo instead">
@@ -51,7 +52,10 @@
       <div class="chips" id="scenes" role="group" aria-label="Place type"></div>
       <div class="actions row">
         <button class="btn ghost" id="retake">Retake</button>
-        <button class="btn primary" id="save" disabled>Save</button>
+        <button class="btn primary" id="save" disabled>Share</button>
+        <button class="icon-btn outline" id="download" aria-label="Save image" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14" /></svg>
+        </button>
       </div>
     </div>
   </section>

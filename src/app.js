@@ -1,5 +1,6 @@
-// Aera app: start → camera → preview → save/share. Photos never leave the device;
-// only rounded coordinates go to /api/scene.
+// Aera app: the link opens straight into the camera → shoot → preview → share.
+// The start screen is only a fallback when the camera can't start.
+// Photos never leave the device; only rounded coordinates go to /api/scene.
 
 import { compose, ensureFonts } from './compose.js';
 import { SCENES } from './scenes.js';
@@ -10,11 +11,12 @@ import { photoGps, photoTakenAt, fetchScene } from './location.js';
 const SAMPLE_READING = { aqi: 42, source: 'IQAir', scope: 'city', sample: true };
 
 const $ = (id) => document.getElementById(id);
+const fontsReady = ensureFonts(); // loads alongside the camera; the first render waits for it
 const video = $('video');
 const canvas = $('canvas');
 
 const state = {
-  screen: 'start',
+  screen: 'camera',
   mirrored: false,
   shot: null,          // { img, takenAt, gps, detected, detecting }
   scene: 'auto',       // 'auto' | SCENES key | null
@@ -23,10 +25,9 @@ const state = {
 
 /* ── Screens ──────────────────────────────────────────────────────────── */
 
-function show(screen, { push = true } = {}) {
+function show(screen) {
   for (const id of ['start', 'camera', 'preview']) $(id).hidden = id !== screen;
   if (screen !== 'camera') stopCamera(video);
-  if (push && screen !== 'start' && state.screen === 'start') history.pushState({ aera: screen }, '');
   state.screen = screen;
 }
 
@@ -35,21 +36,22 @@ function notify(text) {
   $('notice').hidden = !text;
 }
 
-// Android back / browser back returns to the start screen.
-window.addEventListener('popstate', () => { if (state.screen !== 'start') show('start', { push: false }); });
+// The preview pushes a history entry, so Android back / browser back means "retake".
+window.addEventListener('popstate', () => { if (state.screen === 'preview') openCamera(); });
 
 /* ── Camera ───────────────────────────────────────────────────────────── */
 
 async function openCamera() {
   notify('');
   show('camera');
+  $('camera').classList.remove('live');
   try {
     const { mirrored } = await startCamera(video);
     state.mirrored = mirrored;
     video.classList.toggle('mirrored', mirrored);
+    $('camera').classList.add('live');
   } catch (err) {
-    if (history.state?.aera) history.back(); // drop the camera history entry
-    show('start', { push: false });
+    show('start');
     notify(cameraError(err));
   }
 }
@@ -102,7 +104,7 @@ async function onFile(e) {
     shot.detecting = false;
     if (state.shot === shot) { renderScenes(); render(); }
   };
-  img.onerror = () => { show('start', { push: false }); notify('That photo couldn’t be opened. Try a JPEG or PNG.'); };
+  img.onerror = () => { show('start'); notify('That photo couldn’t be opened. Try a JPEG or PNG.'); };
   img.src = url;
 }
 
@@ -111,9 +113,10 @@ async function onFile(e) {
 function openPreview(shot) {
   state.shot = shot;
   state.scene = 'auto';
+  if (history.state?.aera !== 'preview') history.pushState({ aera: 'preview' }, '');
   show('preview');
   renderScenes();
-  render();
+  fontsReady.finally(() => { if (state.shot === shot) render(); });
 }
 
 const effectiveScene = () => (state.scene === 'auto' ? state.shot?.detected ?? null : state.scene);
@@ -134,7 +137,9 @@ function prepareFile() {
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
     state.file = new File([blob], `aera-${stamp}.jpg`, { type: 'image/jpeg' });
     $('save').disabled = false;
-    $('save').textContent = canShareFile(state.file) ? 'Save or share' : 'Download';
+    const share = canShareFile(state.file);
+    $('save').textContent = share ? 'Share' : 'Download';
+    $('download').hidden = !share; // with a share sheet, keep a quiet way to just save the file
   }, 'image/jpeg', 0.92);
 }
 
@@ -151,6 +156,12 @@ async function save() {
       if (err?.name === 'AbortError') return; // user closed the sheet
     }
   }
+  download();
+}
+
+function download() {
+  const file = state.file;
+  if (!file) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file);
   a.download = file.name;
@@ -178,11 +189,12 @@ function renderScenes() {
 /* ── Wiring ───────────────────────────────────────────────────────────── */
 
 $('openCamera').addEventListener('click', openCamera);
-$('closeCamera').addEventListener('click', () => history.back());
 $('shutter').addEventListener('click', takePhoto);
-$('retake').addEventListener('click', openCamera);
+$('retake').addEventListener('click', () => (history.state?.aera === 'preview' ? history.back() : openCamera()));
 $('save').addEventListener('click', save);
+$('download').addEventListener('click', download);
 $('file').addEventListener('change', onFile);
 document.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', pickPhoto));
 
-await ensureFonts();
+// Straight into the camera: the browser's permission prompt is the only step.
+openCamera();

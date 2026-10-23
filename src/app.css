@@ -68,7 +68,9 @@ body {
 }
 .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .actions.row { flex-direction: row; }
+.actions.row { align-items: center; }
 .actions.row .btn { flex: 1; }
+.icon-btn.outline { flex: none; width: 52px; height: 52px; background: transparent; border: 1px solid var(--hair); }
 .fine { margin: 0; font-size: 12px; color: var(--paper-mute); letter-spacing: .04em; }
 
 /* ── Camera ── */
@@ -83,7 +85,14 @@ body {
 }
 .viewfinder video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .viewfinder video.mirrored { transform: scaleX(-1); }
-.close { position: absolute; top: 12px; left: 12px; }
+.vf-wait {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  color: var(--paper-mute); font-size: 13px; letter-spacing: .04em; text-align: center; padding: 24px;
+  transition: opacity .3s ease;
+}
+.wordmark.small { font: 800 34px/1 var(--brand); letter-spacing: .06em; color: var(--paper); }
+.camera.live .vf-wait { opacity: 0; pointer-events: none; }
 .camera-bar {
   display: flex; align-items: center; justify-content: space-around;
   height: 112px; flex: none;
