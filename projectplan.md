@@ -30,7 +30,9 @@
 - [x] Preview screen: composed image, Auto scene + one-tap override chips, Retake
 - [x] Export JPEG (0.92) prepared ahead of the tap; "Save or share" via Web Share when files are shareable, else Download
 - [x] Verified in browser at 375px with a simulated camera stream (pane blocks real cameras)
-- [ ] **Test on a real phone over HTTPS** (needs a Vercel preview deploy — camera requires HTTPS off localhost)
+- [x] Git + private GitHub repo (github.com/agustinpodesta/aera) + Vercel project `aera` (CLI-deployed, not git-connected; behind Vercel login)
+- [x] Deployed: app, studio and /api/scene verified live; PRD/plan/dev server/photos excluded (404)
+- [ ] **Test on a real phone over HTTPS** — open https://aera-99vqqbx0n-agustinpodesta98-6708s-projects.vercel.app signed in to Vercel
 - [ ] Live captures get no scene until M3 adds geolocation; images still say SAMPLE DATA until M3
 
 ## Milestone 3 — Real air-quality data

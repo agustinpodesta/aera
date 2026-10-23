@@ -25,3 +25,5 @@ yarn-error.log*
 images templates/
 samples/*
 !samples/samples.json
+.env*
+!.env.example
