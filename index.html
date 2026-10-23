@@ -50,7 +50,12 @@
 
   <!-- Preview -->
   <section class="screen preview" id="preview" aria-label="Your air report" hidden>
-    <div class="frame"><canvas id="canvas" width="1080" height="1920" aria-label="Your photo with its air report"></canvas></div>
+    <div class="frame">
+      <div class="stack">
+        <canvas id="canvas" width="1080" height="1920" aria-hidden="true"></canvas>
+        <img id="previewImg" alt="Your photo with its air report" hidden />
+      </div>
+    </div>
     <div class="preview-bar">
       <button class="place" id="place" aria-haspopup="dialog">Reading the air…</button>
       <div class="chips" id="scenes" role="group" aria-label="Place type"></div>
@@ -116,6 +121,7 @@
     </div>
   </div>
 
+  <p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
   <input id="file" type="file" accept="image/*" hidden />
   <script type="module" src="src/app.js"></script>
 </body>

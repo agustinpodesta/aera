@@ -10,6 +10,12 @@ import { savePhoto, listPhotos, getPhoto, deletePhoto } from './gallery.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the camera has been open longer than this
 
+// Websites can't write to the Photos library directly. On iOS the only route is the
+// share sheet's "Save Image"; on Android a download lands in the phone's gallery.
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS reports as a Mac
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+
 const $ = (id) => document.getElementById(id);
 const fontsReady = ensureFonts(); // loads alongside the camera; the first render waits for it
 const video = $('video');
@@ -186,6 +192,7 @@ function render() {
 function prepareFile() {
   state.file = null;
   $('save').disabled = true;
+  hidePreviewImage();
   const shot = state.shot;
   if (shot.loading) return; // never share a half-loaded reading
   canvas.toBlob((blob) => {
@@ -201,8 +208,22 @@ function prepareFile() {
     }).then(updateGalleryButton).catch(() => {});
     const share = canShareFile(state.file);
     $('save').textContent = share ? 'Share' : 'Download';
-    $('download').hidden = !share; // with a share sheet, keep a quiet way to just save the file
+    $('download').hidden = !share; // with a share sheet, keep a one-tap "save to my photos" too
+    showPreviewImage(blob);
   }, 'image/jpeg', 0.92);
+}
+
+// Show the finished JPEG as a real <img> over the canvas, so a long-press offers
+// "Save to Photos" (iOS) / "Download image" (Android) like any photo on the web.
+function showPreviewImage(blob) {
+  const img = $('previewImg');
+  if (img.src) URL.revokeObjectURL(img.src);
+  img.src = URL.createObjectURL(blob);
+  img.hidden = false;
+}
+
+function hidePreviewImage() {
+  $('previewImg').hidden = true;
 }
 
 const canShareFile = (file) => !!navigator.canShare?.({ files: [file] });
@@ -220,6 +241,16 @@ async function shareFile(file) {
   downloadFile(file);
 }
 
+// The "save" icon: get the photo into the phone's own gallery with as few taps as the platform allows.
+async function saveToDevice(file) {
+  if (!file) return;
+  if (IS_IOS && canShareFile(file)) {
+    try { await navigator.share({ files: [file] }); } catch { /* closed the sheet */ }
+    return;
+  }
+  downloadFile(file);
+}
+
 function downloadFile(file) {
   if (!file) return;
   const a = document.createElement('a');
@@ -229,6 +260,16 @@ function downloadFile(file) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(IS_ANDROID ? 'Saved to your phone — it’s in your gallery under Downloads.' : 'Downloaded.');
+}
+
+let toastTimer = 0;
+function toast(text) {
+  const el = $('toast');
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
 }
 
 // One line under the photo: what the reading is, and a way to change the place.
@@ -398,10 +439,11 @@ $('openCamera').addEventListener('click', openCamera);
 $('shutter').addEventListener('click', takePhoto);
 $('retake').addEventListener('click', () => (history.state?.aera === 'preview' ? history.back() : openCamera()));
 $('save').addEventListener('click', () => shareFile(state.file));
-$('download').addEventListener('click', () => downloadFile(state.file));
+$('download').addEventListener('click', () => saveToDevice(state.file));
 $('galleryBtn').addEventListener('click', () => openGallery());
 $('viewerShare').addEventListener('click', () => shareFile(state.viewer?.file));
-$('viewerSave').addEventListener('click', () => downloadFile(state.viewer?.file));
+$('viewerSave').addEventListener('click', () => saveToDevice(state.viewer?.file));
+for (const id of ['download', 'viewerSave']) $(id).setAttribute('aria-label', IS_IOS ? 'Save to Photos' : 'Save to your gallery');
 $('viewerDelete').addEventListener('click', removeViewed);
 document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => history.back()));
 $('place').addEventListener('click', openSheet);

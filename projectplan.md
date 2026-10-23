@@ -59,6 +59,7 @@
 - [x] Camera bar: last-photo thumbnail opens the gallery (left), import a photo (right)
 - [x] Gallery grid (newest first) → viewer: Share again, save, delete; back gesture walks camera ← preview/gallery ← viewer
 - [x] Survives reloads; asks `navigator.storage.persist()`; "Saved only on this device" note
+- [x] Save to the phone's gallery: iOS → share sheet ("Save Image" → Photos, the only route Apple allows websites); Android → one-tap download into the gallery (Downloads) + confirmation toast; preview is a real JPEG so long-press "Save to Photos" / "Download image" works
 - [ ] iPhone Safari may clear site storage after ~7 days unused → add PWA manifest + "Add to Home Screen" hint (M4)
 
 ## Milestone 4 — Sharing & testing
