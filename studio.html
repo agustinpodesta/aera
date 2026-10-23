@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Aera Studio</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Syne:wght@800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="src/studio.css" />
+</head>
+<body>
+  <header class="bar">
+    <span class="mark">Aera</span>
+    <span class="tag">Studio · Milestone 1 prototype</span>
+  </header>
+
+  <main class="layout">
+    <section class="stage" aria-label="Preview">
+      <div class="frame" id="frame">
+        <canvas id="canvas" width="1080" height="1920" aria-label="Composed air report image"></canvas>
+        <div class="safe" id="safe" hidden>
+          <div class="safe-top"><span>Instagram header</span></div>
+          <div class="safe-bottom"><span>Instagram reply bar</span></div>
+        </div>
+      </div>
+      <p class="note">All readings here are illustrative sample data, not measurements.</p>
+    </section>
+
+    <section class="controls" aria-label="Controls">
+      <div class="group">
+        <div class="group-head">
+          <h2>Photo</h2>
+          <label class="btn">
+            Add photos
+            <input id="file" type="file" accept="image/*" multiple hidden />
+          </label>
+        </div>
+        <div class="thumbs" id="thumbs"></div>
+        <p class="hint">Or drop images anywhere on the page. Files listed in <code>samples/samples.json</code> load automatically.</p>
+      </div>
+
+      <div class="group">
+        <h2>Sample reading</h2>
+        <div class="chips" id="readings"></div>
+      </div>
+
+      <div class="group">
+        <h2>Scene</h2>
+        <div class="chips" id="scenes"></div>
+        <p class="hint" id="sceneHint"></p>
+      </div>
+
+      <div class="group">
+        <h2>Check</h2>
+        <label class="toggle"><input type="checkbox" id="safeToggle" /> Show Instagram Story safe zones</label>
+      </div>
+
+      <div class="group">
+        <button class="btn primary" id="download">Download PNG (1080×1920)</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="src/studio.js"></script>
+</body>
+</html>

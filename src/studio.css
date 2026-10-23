@@ -1,0 +1,99 @@
+:root {
+  --paper: #F2EDE4;
+  --paper-2: #E8E2D6;
+  --forest: #1E3A2B;
+  --ink: #23231F;
+  --mute: rgba(35, 35, 31, 0.6);
+  --hair: rgba(35, 35, 31, 0.16);
+  --signal: #E4572E;
+  --serif: "Instrument Serif", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 14px/1.5 var(--mono);
+}
+
+.bar {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--hair);
+}
+.mark { font: italic 30px/1 var(--serif); color: var(--forest); }
+.tag { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+
+.layout {
+  display: grid; gap: 28px;
+  padding: 20px 16px 48px;
+  max-width: 1040px; margin: 0 auto;
+}
+@media (min-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 420px) 1fr; gap: 48px; padding-top: 32px; }
+  .stage { position: sticky; top: 24px; align-self: start; }
+}
+
+.frame {
+  position: relative;
+  width: 100%; max-width: 420px; margin: 0 auto;
+  aspect-ratio: 9 / 16;
+  box-shadow: 0 1px 0 var(--hair), 0 18px 40px -18px rgba(30, 40, 30, .35);
+}
+.frame canvas { display: block; width: 100%; height: 100%; }
+
+.safe { position: absolute; inset: 0; pointer-events: none; }
+.safe-top, .safe-bottom {
+  position: absolute; left: 0; right: 0;
+  background: repeating-linear-gradient(135deg, rgba(228, 87, 46, .22) 0 6px, rgba(228, 87, 46, .1) 6px 12px);
+  display: flex; align-items: center; justify-content: center;
+}
+.safe-top { top: 0; height: 13.02%; }       /* 250 / 1920 */
+.safe-bottom { bottom: 0; height: 13.02%; } /* 250 / 1920 */
+.safe span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #fff; background: rgba(0,0,0,.45); padding: 2px 8px; }
+
+.note { text-align: center; color: var(--mute); font-size: 12px; margin: 14px 0 0; }
+
+.controls { display: grid; gap: 26px; align-content: start; }
+.group { display: grid; gap: 12px; }
+.group-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+h2 { margin: 0; font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; }
+.hint { margin: 0; color: var(--mute); font-size: 12px; }
+code { font-family: inherit; background: var(--paper-2); padding: 0 4px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 18px;
+  font: 500 13px var(--mono); letter-spacing: .04em;
+  color: var(--ink); background: transparent;
+  border: 1px solid var(--ink); border-radius: 999px; cursor: pointer;
+}
+.btn:focus-visible, .chip:focus-visible, .thumb:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.btn.primary { background: var(--forest); color: var(--paper); border-color: var(--forest); width: 100%; }
+
+.thumbs { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.thumb {
+  flex: 0 0 64px; height: 88px; padding: 0;
+  border: 1px solid var(--hair); background: center / cover no-repeat var(--paper-2);
+  cursor: pointer;
+}
+.thumb.ph { background-image: linear-gradient(#A9BCC4, #D9D2C3 60%, #2A3B31 60%); }
+.thumb.on { outline: 2px solid var(--forest); outline-offset: 2px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 0 14px;
+  font: 400 13px var(--mono); color: var(--ink);
+  background: transparent; border: 1px solid var(--hair); border-radius: 999px; cursor: pointer;
+}
+.chip b { font-weight: 500; color: var(--signal); }
+.chip .dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 2.5px var(--hair); }
+.chip.on { border-color: var(--forest); background: var(--forest); color: var(--paper); }
+.chip.on b { color: #F6A07F; }
+
+.toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.toggle input { width: 18px; height: 18px; accent-color: var(--forest); }

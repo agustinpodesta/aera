@@ -1,0 +1,333 @@
+PRODUCT REQUIREMENTS DOCUMENT (PRD)
+Working Name: AIRFRAME (placeholder)
+
+1. PRODUCT OVERVIEW
+
+Product type: Mobile-first web application.
+
+Core concept:
+A camera that captures a moment and stamps it with the air quality associated with the location where the photograph was taken.
+
+One-line pitch:
+“Your camera captures what a place looks like. This one captures what the air was like, too.”
+
+Inspiration:
+The project is inspired by PXLCAM, created by Anna Zhang. PXLCAM combines intentionally low-resolution photography with a climate-clock overlay. This project should explore a different concept rather than reproduce its visual identity or core mechanics.
+
+Instead of a climate countdown, the product documents a specific environmental condition: the air quality associated with a photograph's location and time.
+
+2. THE PRODUCT EXPERIENCE
+
+The experience should feel like using a camera, not filling out a form.
+
+Ideal user journey:
+1. The user discovers the website through an Instagram Reel.
+2. They open it on their phone.
+3. They grant camera and location permissions.
+4. They take a photograph.
+5. The app retrieves available air-quality data for that location.
+6. The photograph is transformed into a beautifully designed environmental snapshot.
+7. They tap Share and post the result to Instagram Stories.
+
+The resulting image should make other people curious enough to ask where it came from. Every shared photograph can become an advertisement for the camera.
+
+3. VISUAL DIRECTION
+
+Recommended direction: Environmental Field Notes.
+
+The visual language should resemble a contemporary scientific expedition mixed with an editorial travel magazine, rather than directly copying PXLCAM's low-resolution, grainy retro aesthetic.
+
+Design ingredients:
+- Beautiful, relatively natural photographs.
+- Minimalist typography.
+- A small, distinctive air-quality indicator.
+- Geographic coordinates or a location name.
+- A timestamp.
+- A restrained graphic element that gives every image a recognizable identity.
+
+Suggested palette:
+- Warm off-white.
+- Deep forest green.
+- Charcoal.
+- Restrained signal orange for important measurements.
+
+The photograph remains the hero. Environmental information should be part of the composition rather than a sticker pasted on top.
+
+Example composition (illustrative, not a live measurement):
+
+SEOUL, SOUTH KOREA
+AIR REPORT / 14 OCT 2026
+
+AQI 42 · GOOD
+PM2.5: [measurement, if available]
+
+AIRFRAME / 37.56° N, 126.97° E
+
+Design principles:
+1. Photograph first. Don't cover the image with excessive data.
+2. Environmental information second. The AQI should be legible without dominating the composition.
+3. Consistent identity. Every exported photograph should be recognizable as coming from the same camera.
+
+Start with one excellent template rather than offering many filters. The product's identity should come from its composition, typography, and data presentation.
+
+4. FUNCTIONAL REQUIREMENTS
+
+P0: Required for the MVP
+
+- Camera access: Open the device camera through the browser.
+- Photo capture: Take a photograph using the camera.
+- Location: Request permission to access the user's location.
+- Air-quality data: Retrieve available AQI information for the selected location.
+- Photo composition: Combine the photograph with the environmental overlay.
+- Preview: Let the user inspect the final image before exporting.
+- Export: Generate a downloadable image suitable for Instagram Stories.
+- Mobile usability: Work well on mobile browsers.
+- Fallback: Allow users to select a photograph and manually select a location if camera or GPS access fails.
+- Data attribution: Identify the air-quality data provider and its timestamp.
+
+P1: After validating the concept
+
+- Multiple visual templates.
+- Front and rear camera switching.
+- Optional low-resolution or film-inspired effects.
+- An ambient color indicator based on AQI.
+- A history of previously created photographs.
+- A public gallery of user-submitted images.
+- Optional sharing of a link to the project.
+
+Postpone accounts, social feeds, likes, leaderboards, and community features. They add complexity without being necessary to validate the core idea.
+
+5. TECHNICAL IMPLEMENTATION
+
+Suggested stack:
+
+- Frontend: Next.js and React — camera interface and user experience.
+- Styling: Tailwind CSS — responsive layout.
+- Camera: Browser MediaDevices API — capture photographs.
+- Image processing: HTML Canvas API — compose the photograph and overlay.
+- Location: Browser Geolocation API — obtain coordinates.
+- Air-quality data: IQAir AirVisual API — retrieve air-quality measurements.
+- Backend: Next.js server endpoint — keep the API key private.
+- Hosting: Vercel — deploy the web application.
+
+This is a suggested implementation, not a requirement to use every technology.
+
+Camera access:
+The browser's getUserMedia() API can request access to a device's camera. It requires a secure context, normally HTTPS, and the user's permission.
+
+The application should:
+1. Request camera access after the user taps the camera button.
+2. Prefer the rear-facing camera on mobile devices.
+3. Display a live preview.
+4. Allow the user to capture a photograph.
+5. Stop the camera stream when it is no longer needed.
+
+The website should also support selecting an existing image as a fallback.
+
+Creating the final photograph:
+The Canvas API can combine the photograph, text, graphics, and background elements into a single image. The toBlob() method can export the completed composition as an image file.
+
+Suggested pipeline:
+1. Capture the photograph.
+2. Resize or crop it to fit the chosen template.
+3. Draw the image onto a canvas.
+4. Add typography and the air-quality panel.
+5. Export the result as a JPEG or PNG.
+6. Offer the result for sharing or download.
+
+For the first version, image processing should happen locally in the browser. That avoids uploading photographs to the server and reduces infrastructure requirements.
+
+6. AIR-QUALITY DATA: IQAIR
+
+The main external dependency is ensuring that environmental data is available, appropriate for the location, and presented accurately.
+
+Official documentation:
+https://api-docs.iqair.com/
+API plan information:
+https://www.iqair.com/air-quality-monitors/api
+
+The free Community API plan has been described as offering:
+- 5 calls per minute.
+- 500 calls per day.
+- 10,000 calls per month.
+- City-level air-quality information.
+- Overall US AQI and Chinese AQI.
+- Real-time weather information.
+
+Station-level data and pollutant concentrations are listed under the Startup plan and above. Verify current limits and plan terms directly in IQAir's documentation before implementation.
+
+Important: “US & China AQI” refers to the two AQI calculation standards, not a limitation to locations in the United States and China. Data availability depends on supported locations and coverage.
+
+Proposed data flow:
+1. The browser requests the user's coordinates.
+2. The frontend sends the coordinates to our backend.
+3. The backend requests the available location-level data from IQAir.
+4. The backend returns the measurement, location, timestamp, and AQI scale.
+5. The frontend generates the photograph's overlay.
+
+The API key must remain on the server rather than being exposed in frontend JavaScript.
+
+Limitations:
+- Location accuracy: A city-level measurement does not necessarily represent the air at the exact location where the photograph was taken.
+- Update frequency: IQAir stations have different update cycles; verify the current behavior for the chosen endpoint.
+- Data availability: Some locations may not have suitable coverage.
+- API permissions: Confirm terms, attribution requirements, usage limits, and whether the plan permits the intended use before public launch.
+
+The overlay should not imply a precise street-level measurement if only city-level data is available.
+
+Example:
+SEOUL · CITY READING
+AQI 42 · GOOD
+DATA UPDATED 14:00
+
+Values above are illustrative. The actual app must use the API's returned data and timestamp.
+
+If no usable reading is available, allow the user to take a photograph without an AQI overlay or choose another supported location.
+
+Product decision:
+Begin with city-level data if the plan supports the intended usage. Investigate station-level data only if users demonstrate a need for more precise readings.
+
+Historical photos:
+Do not include historical air-quality comparisons in the initial MVP. The free plan does not provide the historical data needed to accurately reconstruct conditions from years ago. IQAir's advertised historical window on higher-tier plans may still be insufficient for photos from two years ago. Investigate a separate historical data provider or verify the required IQAir plan before implementing this feature.
+
+7. INSTAGRAM STORIES AND SHARING
+
+Desired experience:
+After taking a photograph, the user sees:
+- “Download image”
+- “Share my air report”
+
+A regular web application cannot guarantee direct handoff to Instagram Stories on every device.
+
+The Web Share API can open the device's native sharing interface and share files when the browser and operating system support it. Support varies, so the application must detect capabilities rather than assume them.
+
+Recommended sharing flow on supported mobile browsers:
+1. Generate the final image.
+2. Convert it into a File object.
+3. Check whether the browser supports sharing that file.
+4. Invoke the native share sheet after the user taps the share button.
+5. Let the user select an available destination.
+
+Fallback:
+1. Download the completed image.
+2. Show a clear instruction: “Open Instagram, create a Story, and select this image from your gallery.”
+3. Offer a button to open Instagram, where supported.
+
+The system share sheet may offer Instagram, but it does not guarantee that the image will open directly in the Story composer. Test on actual iPhones and Android devices before advertising this functionality.
+
+References:
+Web Share API: https://developer.mozilla.org/en-US/docs/Web/API/Web_Share_API
+File sharing with navigator.share(): https://developer.mozilla.org/en-US/docs/Web/API/Navigator/share
+Camera API: https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia
+Canvas export: https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob
+
+Do not build a custom Instagram integration for the first version.
+
+8. GROWTH LOOP
+
+The Strava comparison highlights that people share activity summaries because they turn an experience into a personal artifact that is easy to communicate.
+
+The photograph should communicate:
+- Where the user was.
+- What the place looked like.
+- What air quality was reported.
+- When the observation was recorded.
+
+Proposed loop:
+Discover → Capture → Personalize → Share → Discover
+
+1. Someone sees a photograph with a distinctive air-quality overlay.
+2. They become curious about the camera.
+3. They visit the website.
+4. They create their own photograph.
+5. They share it on Instagram Stories.
+6. Other people discover the product through that image.
+
+Lightweight mechanisms to test:
+- A recognizable, consistent image identity.
+- A subtle product signature and short URL.
+- A reason to compare air quality between different cities or visits.
+
+Do not exaggerate pollution or turn AQI into a competition. The objective is curiosity, not fear.
+
+Do not build yet:
+- Public user profiles.
+- Followers.
+- Likes.
+- Global leaderboards.
+- Automated posting to Instagram.
+- A map of every user's photographs.
+
+9. SUCCESS CRITERIA
+
+The MVP should answer:
+“Will people use this camera and share the resulting images because they find them interesting or beautiful?”
+
+Evaluate:
+- Capture completion rate: Can users successfully create a photograph?
+- Export rate: Do users like the finished image enough to save it?
+- Share-button usage: Are users attempting to distribute their results?
+- Successful file-sharing rate: Does sharing work on their devices?
+- Repeat usage: Do users return to create another photograph?
+- Referral traffic: Are shared images bringing new visitors?
+
+Prioritize successful photo creation and export over total website traffic. A viral Reel could produce many visits without proving that the product itself is useful.
+
+10. RISKS AND MITIGATIONS
+
+- IQAir coverage is insufficient: Provide location selection and a no-data fallback.
+- The reading appears more precise than it is: Label geographic scope and timestamp clearly.
+- Instagram sharing is inconsistent: Implement native file sharing where supported, with image download as a dependable fallback.
+- The product resembles PXLCAM too closely: Establish a distinct visual identity and make air-quality reporting central to the concept.
+- API limits become restrictive: Cache responses appropriately and monitor usage.
+- Users don't share the images: Test different compositions before adding social features.
+- Camera permissions fail: Provide a photo-upload alternative.
+- Privacy concerns: Process images locally and avoid retaining precise location data unnecessarily.
+
+11. DEVELOPMENT MILESTONES
+
+Milestone 1: Static visual prototype
+Create the image composition using sample photographs and fictional, clearly illustrative air-quality data.
+Goal: Establish the visual identity before integrating APIs.
+
+Milestone 2: Working camera
+Implement camera access, photograph capture, preview, and export.
+Goal: Produce a finished image on a mobile browser.
+
+Milestone 3: Real air-quality data
+Integrate IQAir through a backend endpoint, handle missing data, and display the source and timestamp.
+Goal: Generate photographs using real measurements.
+
+Milestone 4: Sharing and testing
+Implement native file sharing where supported, a download fallback, and test on iOS and Android.
+Goal: Make the image easy to publish to Instagram Stories.
+
+This order reduces the risk of spending time on API integration before establishing whether the photograph is visually compelling.
+
+12. FINAL PRODUCT DECISIONS
+
+- Platform: Mobile-first website.
+- Core experience: Take a photograph and add a location-aware air-quality report.
+- Data provider: IQAir, subject to API-plan and terms verification.
+- Visual identity: Contemporary environmental field notes rather than a direct retro-camera imitation.
+- Sharing: Native file sharing where supported, with image download as the fallback.
+- Accounts: None.
+- Photo storage: Local processing; no server-side photo storage by default.
+- Monetization: None initially.
+- Primary objective: Create photographs people genuinely want to share.
+
+Final design principle:
+Make the photograph beautiful enough that someone would want to share it even if the AQI were removed. Then make the environmental information the detail that makes it memorable.
+
+NEXT FEATURE (NOT MVP): IMPORTING GEO-TAGGED PHOTOS
+
+Consider importing old photographs only after validating the live-capture MVP.
+
+A photo's EXIF metadata may contain GPS coordinates and capture date. The app could use these to identify the place and date, but historical air-quality data is required to accurately report conditions at that time. Current data must never be substituted for historical data without clear labeling.
+
+Potential future experience:
+- Capture: Take a photo and stamp it with current air-quality data.
+- Archive: Import an old photo and explore its location and date.
+- Compare: Create a visual comparison between two places or moments.
+
+A possible shareable use case is “Tokyo then vs. my city today.” However, it should only be implemented when reliable historical data is available for the relevant dates and locations.

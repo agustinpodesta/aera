@@ -1,0 +1,7 @@
+# Never deploy: personal test photos, private docs, local tooling
+images templates/
+samples/
+AIRFRAME_PRD.txt
+projectplan.md
+dev-server.mjs
+.env*

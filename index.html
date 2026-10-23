@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0E0F0D" />
+  <title>Aera — the air, in every photo</title>
+  <meta name="description" content="A camera that stamps your photo with the air quality where it was taken." />
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="src/app.css" />
+</head>
+<body>
+  <!-- Start -->
+  <section class="screen start" id="start" aria-label="Aera">
+    <div class="start-inner">
+      <h1 class="wordmark">AERA</h1>
+      <p class="pitch">Your camera captures what a place looks like. This one captures the air, too.</p>
+      <p class="notice" id="notice" role="status" hidden></p>
+      <div class="actions">
+        <button class="btn primary" id="openCamera">Open camera</button>
+        <button class="btn ghost" data-pick>Choose a photo</button>
+      </div>
+      <p class="fine">Photos stay on your device.</p>
+    </div>
+  </section>
+
+  <!-- Camera -->
+  <section class="screen camera" id="camera" aria-label="Camera" hidden>
+    <div class="viewfinder">
+      <video id="video" playsinline muted aria-label="Camera preview"></video>
+      <button class="icon-btn close" id="closeCamera" aria-label="Close camera">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+    <div class="camera-bar">
+      <button class="icon-btn" data-pick aria-label="Choose a photo instead">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M5 17l5-5 3 3 2.5-2.5L19 16" /></svg>
+      </button>
+      <button class="shutter" id="shutter" aria-label="Take photo"><span></span></button>
+      <span class="icon-btn spacer" aria-hidden="true"></span>
+    </div>
+  </section>
+
+  <!-- Preview -->
+  <section class="screen preview" id="preview" aria-label="Your air report" hidden>
+    <div class="frame"><canvas id="canvas" width="1080" height="1920" aria-label="Your photo with its air report"></canvas></div>
+    <div class="preview-bar">
+      <div class="chips" id="scenes" role="group" aria-label="Place type"></div>
+      <div class="actions row">
+        <button class="btn ghost" id="retake">Retake</button>
+        <button class="btn primary" id="save" disabled>Save</button>
+      </div>
+    </div>
+  </section>
+
+  <input id="file" type="file" accept="image/*" hidden />
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
