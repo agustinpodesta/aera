@@ -4,9 +4,11 @@
 // Coordinates are rounded to ~100 m, which also makes responses CDN-cacheable.
 
 import { detectScene } from './_lib/scene.js';
+import { checkBurst } from './_lib/rate-limit.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).send('Method Not Allowed');
+  if (!checkBurst(req)) return res.status(429).json({ scene: null, error: 'too many requests' });
 
   const lat = Number(req.query.lat), lon = Number(req.query.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 85 || Math.abs(lon) > 180) {

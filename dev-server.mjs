@@ -8,6 +8,14 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
+
+// Load .env.local (e.g. IQAIR_API_KEY, via `vercel env pull .env.local`) like Vercel does.
+try {
+  for (const line of (await readFile(join(ROOT, '.env.local'), 'utf8')).split('\n')) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*"?(.*?)"?\s*$/.exec(line);
+    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2];
+  }
+} catch { /* no .env.local: APIs fall back to keyless sources */ }
 const PORT = Number(process.env.PORT) || 8120;
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript',

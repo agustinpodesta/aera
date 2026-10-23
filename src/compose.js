@@ -138,8 +138,8 @@ function buildRows(r) {
   const cat = aqiCategory(r.aqi);
   const taken = r.takenAt ? new Date(r.takenAt) : new Date();
   return [
-    { label: 'AQI',  lines: [r.aqi != null ? String(Math.round(r.aqi)) : '—'], dot: aqiDotColor(r.aqi) },
-    { label: 'AIR',  lines: cat ? cat.lines : ['NO READING'] },
+    { label: 'AQI',  lines: [r.pending ? '…' : r.aqi != null ? String(Math.round(r.aqi)) : '—'], dot: aqiDotColor(r.aqi) },
+    { label: 'AIR',  lines: r.pending ? ['…'] : cat ? cat.lines : ['NO READING'] },
     { label: 'TIME', lines: [fmtTime(taken, r.timeZone, r.utcOffsetMin)] },
   ];
 }
@@ -187,10 +187,13 @@ function drawStrip(ctx, r, rows, top, scene) {
   // Source + update time (attribution), URL
   let footer;
   if (r.sample) footer = 'SAMPLE DATA — NOT A MEASUREMENT';
-  else if (r.aqi == null) footer = 'NO AIR DATA HERE · AERACAM.COM';
+  else if (r.pending) footer = 'READING THE AIR…';
+  else if (r.aqi == null) footer = r.historical ? 'NO AIR DATA FOR THAT DAY · AERACAM.COM' : 'NO AIR DATA HERE · AERACAM.COM';
   else {
     const source = String(r.source || '').toUpperCase() + (r.scope === 'modeled' ? ' (MODELED)' : '');
-    footer = `DATA ${source}, UPDATED ${fmtTime(new Date(r.updatedAt), r.timeZone)} · AERACAM.COM`;
+    // Past photos show the modeled value for the hour they were taken ("FOR"), live ones when it was updated.
+    const when = fmtTime(new Date(r.updatedAt), r.timeZone, r.utcOffsetMin);
+    footer = `DATA ${source}, ${r.historical ? 'FOR' : 'UPDATED'} ${when} · AERACAM.COM`;
   }
   if (r.sample) {
     // Orange marker flags illustrative data without relying on orange text over a photo.

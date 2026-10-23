@@ -37,20 +37,22 @@
 - [x] Frictionless flow (PixelCam-style): link opens straight into the camera; start screen only as fallback; Share is the primary button, save icon beside it; back = retake
 - [x] Deployed: app, studio and /api/scene verified live; PRD/plan/dev server/photos excluded (404)
 - [ ] **Test on a real phone** — https://aeracam.vercel.app (iPhone Safari + Android Chrome: camera, shutter, Share → Instagram Story)
-- [ ] Live captures get no scene until M3 adds geolocation; images still say SAMPLE DATA until M3
+- [x] Live captures get scene + real air via geolocation; SAMPLE DATA removed from the app
 
 ## Milestone 3 — Real air-quality data
-- [ ] `api/air.js`: lat/lon → IQAir `nearest_city`; key stays server-side
-- [ ] Open-Meteo fallback (modeled, labelled as such)
-- [ ] Round coordinates; cache responses; per-IP rate limit
-- [ ] Geolocation permission flow (at capture → AQI + scene) + manual city search fallback
-- [ ] Uploaded old photos: decide labelling — current AQI must not pass for the AQI at the photo's EXIF time
-- [ ] No-data flow (photo without AQI / pick another location)
-- [ ] Attribution + data timestamp on image and in UI
+- [x] `api/air.js`: lat/lon → IQAir `nearest_city` (only if its city is ≤ 40 km away and the reading ≤ 6 h old); key stays server-side
+- [x] Open-Meteo fallback (modeled, labelled "(MODELED)" on the image and "modeled" in the UI)
+- [x] Coordinates rounded (~1 km air, ~100 m scene); in-memory + CDN cache (10 min now, 30 days past hours); per-IP burst limit on /api/air and /api/scene
+- [x] Geolocation asked right after the camera opens; air + scene prefetched so the preview is instant; city search sheet (Open-Meteo geocoding) + "use my current location"
+- [x] Uploaded old photos: the modeled AQI for the hour they were taken ("FOR hh:mm"), never today's reading; NO AIR DATA FOR THAT DAY when outside the archive
+- [x] No-data flow: "Add where this was taken" prompt; NO READING on the image when nothing is available; Share disabled while the reading loads
+- [x] Attribution + data timestamp on image (DATA IQAIR, UPDATED hh:mm) and source line in the UI
 - [x] Scene detection from location (`api/scene.js` + `api/_lib/scene.js`): OpenFreeMap OSM tiles (sea, beach, woods/ice, tall buildings, POIs, nearby city) + 1 Open-Meteo elevation point vs named peaks. Calibrated on 16 places: 15/16 (Bukchon hanok village reads as city — ambiguous). Coords rounded to ~100 m, CDN-cached 30 days. Photo never uploaded.
 - [x] Studio: reads photo EXIF GPS on-device → Auto scene, with one-tap override
 - [x] App preview screen: Auto scene + one-tap override
 - [ ] Before launch: Open-Meteo free tier is non-commercial (10k calls/day) — buy API plan or switch elevation source; add OSM attribution ("© OpenStreetMap contributors") on the about/credits page
+
+- [ ] **IQAir key**: Agustín adds `IQAIR_API_KEY` in Vercel; verify live readings say DATA IQAIR
 
 ## Milestone 4 — Sharing & testing
 - [x] Web Share API with File (capability-detected) — basic version shipped in M2; test on devices
