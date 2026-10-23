@@ -54,6 +54,13 @@
 
 - [x] IQAir key added in Vercel (Production); live readings verified as IQAir city readings (Seoul AQI 39 vs model 89 — model is only the fallback)
 
+## Gallery (added 23 Oct, PXLCAM-style)
+- [x] On-device gallery (`src/gallery.js`, IndexedDB): every finished photo auto-saved (captured or imported); scene changes update the same entry
+- [x] Camera bar: last-photo thumbnail opens the gallery (left), import a photo (right)
+- [x] Gallery grid (newest first) → viewer: Share again, save, delete; back gesture walks camera ← preview/gallery ← viewer
+- [x] Survives reloads; asks `navigator.storage.persist()`; "Saved only on this device" note
+- [ ] iPhone Safari may clear site storage after ~7 days unused → add PWA manifest + "Add to Home Screen" hint (M4)
+
 ## Milestone 4 — Sharing & testing
 - [x] Web Share API with File (capability-detected) — basic version shipped in M2; test on devices
 - [ ] Download fallback + "Open Instagram → Story → pick from gallery" instructions

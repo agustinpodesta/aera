@@ -6,6 +6,7 @@ import { compose, ensureFonts } from './compose.js';
 import { SCENES } from './scenes.js';
 import { startCamera, stopCamera, captureFrame } from './camera.js';
 import { photoGps, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } from './location.js';
+import { savePhoto, listPhotos, getPhoto, deletePhoto } from './gallery.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the camera has been open longer than this
 
@@ -18,15 +19,18 @@ const state = {
   screen: 'camera',
   mirrored: false,
   here: null,          // Promise<{ gps, at, air: Promise, scene: Promise }>: prefetched while framing
-  shot: null,          // { img, takenAt, utcOffsetMin, live, gps, placeName, air, detected, loading }
+  shot: null,          // { id, img, takenAt, utcOffsetMin, live, gps, placeName, air, detected, loading }
   scene: 'auto',       // 'auto' | SCENES key | null
   file: null,          // the exported JPEG, prepared ahead so Share stays inside the tap
+  viewer: null,        // { id, file, url } for the gallery photo being viewed
 };
+
+const newId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 /* ── Screens ──────────────────────────────────────────────────────────── */
 
 function show(screen) {
-  for (const id of ['start', 'camera', 'preview']) $(id).hidden = id !== screen;
+  for (const id of ['start', 'camera', 'preview', 'gallery', 'viewer']) $(id).hidden = id !== screen;
   if (screen !== 'camera') stopCamera(video);
   if (screen !== 'preview') closeSheet();
   state.screen = screen;
@@ -37,8 +41,15 @@ function notify(text) {
   $('notice').hidden = !text;
 }
 
-// The preview pushes a history entry, so Android back / browser back means "retake".
-window.addEventListener('popstate', () => { if (state.screen === 'preview') openCamera(); });
+// Camera is the root. Preview, gallery and viewer push history entries, so the
+// phone's back gesture walks back through them (preview → camera = retake).
+window.addEventListener('popstate', () => {
+  const to = history.state?.aera;
+  if (to === 'gallery') return openGallery({ push: false });
+  if (to === 'viewer') return openViewer(history.state.id, { push: false });
+  if (to === 'preview' && state.shot) return show('preview');
+  if (state.screen !== 'camera') openCamera();
+});
 
 /* ── Camera ───────────────────────────────────────────────────────────── */
 
@@ -85,7 +96,7 @@ async function takePhoto() {
   if (!video.videoWidth) return;
   const img = captureFrame(video, state.mirrored);
   stopCamera(video);
-  const shot = { img, takenAt: new Date(), live: true, gps: null, air: null, detected: null, loading: true };
+  const shot = { id: newId(), img, takenAt: new Date(), live: true, gps: null, air: null, detected: null, loading: true };
   openPreview(shot);
   let here = await locateHere();
   if (Date.now() - here.at > HERE_TTL) here = await locateHere(true);
@@ -111,7 +122,7 @@ async function onFile(e) {
   if (!f) return;
   const img = new Image();
   img.onload = async () => {
-    const shot = { img, takenAt: new Date(f.lastModified || Date.now()), live: false, gps: null, air: null, detected: null, loading: true };
+    const shot = { id: newId(), img, takenAt: new Date(f.lastModified || Date.now()), live: false, gps: null, air: null, detected: null, loading: true };
     openPreview(shot);
     const [gps, taken] = await Promise.all([photoGps(f), photoTakenAt(f)]);
     if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
@@ -155,7 +166,9 @@ function readingFor(shot) {
 function openPreview(shot) {
   state.shot = shot;
   state.scene = 'auto';
-  if (history.state?.aera !== 'preview') history.pushState({ aera: 'preview' }, '');
+  // Imported from the gallery: replace that entry, so back/Retake from the preview goes to the camera.
+  if (history.state?.aera === 'gallery') history.replaceState({ aera: 'preview' }, '');
+  else if (history.state?.aera !== 'preview') history.pushState({ aera: 'preview' }, '');
   show('preview');
   renderPlace();
   renderScenes();
@@ -181,6 +194,11 @@ function prepareFile() {
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
     state.file = new File([blob], `aera-${stamp}.jpg`, { type: 'image/jpeg' });
     $('save').disabled = false;
+    // Every finished photo lands in the on-device gallery; scene changes update the same entry.
+    savePhoto({
+      id: shot.id, createdAt: (shot.savedAt ??= new Date()), aqi: shot.air?.aqi ?? null, scene: effectiveScene(),
+      canvas, blob, name: state.file.name,
+    }).then(updateGalleryButton).catch(() => {});
     const share = canShareFile(state.file);
     $('save').textContent = share ? 'Share' : 'Download';
     $('download').hidden = !share; // with a share sheet, keep a quiet way to just save the file
@@ -189,8 +207,7 @@ function prepareFile() {
 
 const canShareFile = (file) => !!navigator.canShare?.({ files: [file] });
 
-async function save() {
-  const file = state.file;
+async function shareFile(file) {
   if (!file) return;
   if (canShareFile(file)) {
     try {
@@ -200,11 +217,10 @@ async function save() {
       if (err?.name === 'AbortError') return; // user closed the sheet
     }
   }
-  download();
+  downloadFile(file);
 }
 
-function download() {
-  const file = state.file;
+function downloadFile(file) {
   if (!file) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file);
@@ -308,13 +324,86 @@ $('placeQuery').addEventListener('input', (e) => {
 $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) closeSheet(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 
+/* ── Gallery + viewer ─────────────────────────────────────────────────── */
+
+let gridUrls = [];
+
+async function openGallery({ push = true } = {}) {
+  if (push) history.pushState({ aera: 'gallery' }, '');
+  show('gallery');
+  let rows = [];
+  try {
+    rows = await listPhotos();
+  } catch {
+    $('galleryNote').textContent = 'This browser can’t keep photos here (private browsing?).';
+  }
+  gridUrls.forEach((u) => URL.revokeObjectURL(u));
+  gridUrls = [];
+  const fmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  $('grid').replaceChildren(...rows.map((r) => {
+    const url = URL.createObjectURL(r.thumb);
+    gridUrls.push(url);
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = `${fmt.format(r.createdAt)}${r.aqi != null ? `, AQI ${r.aqi}` : ''}`;
+    b.append(img);
+    b.onclick = () => openViewer(r.id);
+    li.append(b);
+    return li;
+  }));
+  $('galleryEmpty').hidden = rows.length > 0;
+  $('grid').hidden = rows.length === 0;
+}
+
+async function openViewer(id, { push = true } = {}) {
+  if (push) history.pushState({ aera: 'viewer', id }, '');
+  show('viewer');
+  const row = await getPhoto(id).catch(() => null);
+  if (!row) { history.back(); return; }
+  if (state.viewer?.url) URL.revokeObjectURL(state.viewer.url);
+  const file = new File([row.blob], row.name || 'aera.jpg', { type: 'image/jpeg' });
+  state.viewer = { id, file, url: URL.createObjectURL(row.blob) };
+  $('viewerImg').src = state.viewer.url;
+  const share = canShareFile(file);
+  $('viewerShare').textContent = share ? 'Share' : 'Download';
+  $('viewerSave').hidden = !share;
+}
+
+async function removeViewed() {
+  if (!state.viewer || !confirm('Delete this photo from Aera?')) return;
+  await deletePhoto(state.viewer.id).catch(() => {});
+  updateGalleryButton();
+  history.back(); // back to the grid, which re-renders without it
+}
+
+// The camera's gallery button shows your latest photo, like a phone camera.
+async function updateGalleryButton() {
+  const thumb = $('galleryThumb');
+  try {
+    const [latest] = await listPhotos();
+    if (thumb.src) URL.revokeObjectURL(thumb.src);
+    thumb.hidden = !latest;
+    if (latest) thumb.src = URL.createObjectURL(latest.thumb);
+    else thumb.removeAttribute('src');
+  } catch {
+    thumb.hidden = true;
+  }
+}
+
 /* ── Wiring ───────────────────────────────────────────────────────────── */
 
 $('openCamera').addEventListener('click', openCamera);
 $('shutter').addEventListener('click', takePhoto);
 $('retake').addEventListener('click', () => (history.state?.aera === 'preview' ? history.back() : openCamera()));
-$('save').addEventListener('click', save);
-$('download').addEventListener('click', download);
+$('save').addEventListener('click', () => shareFile(state.file));
+$('download').addEventListener('click', () => downloadFile(state.file));
+$('galleryBtn').addEventListener('click', () => openGallery());
+$('viewerShare').addEventListener('click', () => shareFile(state.viewer?.file));
+$('viewerSave').addEventListener('click', () => downloadFile(state.viewer?.file));
+$('viewerDelete').addEventListener('click', removeViewed);
+document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => history.back()));
 $('place').addEventListener('click', openSheet);
 $('sheetClose').addEventListener('click', closeSheet);
 $('file').addEventListener('change', onFile);
@@ -322,3 +411,4 @@ document.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('clic
 
 // Straight into the camera: the browser's permission prompt is the only step.
 openCamera();
+updateGalleryButton();

@@ -37,11 +37,14 @@
       </div>
     </div>
     <div class="camera-bar">
-      <button class="icon-btn" data-pick aria-label="Choose a photo instead">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M5 17l5-5 3 3 2.5-2.5L19 16" /></svg>
+      <button class="gallery-btn" id="galleryBtn" aria-label="Your photos">
+        <img id="galleryThumb" alt="" hidden />
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></svg>
       </button>
       <button class="shutter" id="shutter" aria-label="Take photo"><span></span></button>
-      <span class="icon-btn spacer" aria-hidden="true"></span>
+      <button class="icon-btn" data-pick aria-label="Import a photo from your phone">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M5 17l5-5 3 3 2.5-2.5L19 16" /></svg>
+      </button>
     </div>
   </section>
 
@@ -56,6 +59,44 @@
         <button class="btn primary" id="save" disabled>Share</button>
         <button class="icon-btn outline" id="download" aria-label="Save image" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14" /></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Gallery: finished photos, stored only on this device -->
+  <section class="screen gallery" id="gallery" aria-labelledby="galleryTitle" hidden>
+    <header class="gallery-head">
+      <button class="icon-btn" data-back aria-label="Back to camera">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+      </button>
+      <h1 id="galleryTitle">Your photos</h1>
+      <button class="icon-btn" data-pick aria-label="Import a photo from your phone">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+      </button>
+    </header>
+    <ul class="grid" id="grid"></ul>
+    <div class="empty" id="galleryEmpty" hidden>
+      <p>Photos you take with Aera show up here.</p>
+      <button class="btn ghost" data-pick>Import a photo</button>
+    </div>
+    <p class="fine gallery-note" id="galleryNote">Saved only on this device.</p>
+  </section>
+
+  <!-- Viewer: one saved photo -->
+  <section class="screen viewer" id="viewer" aria-label="Photo" hidden>
+    <div class="frame"><img id="viewerImg" alt="Your photo with its air report" /></div>
+    <div class="preview-bar">
+      <div class="actions row">
+        <button class="icon-btn outline" data-back aria-label="Back to your photos">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+        </button>
+        <button class="btn primary" id="viewerShare">Share</button>
+        <button class="icon-btn outline" id="viewerSave" aria-label="Save image">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14" /></svg>
+        </button>
+        <button class="icon-btn outline" id="viewerDelete" aria-label="Delete photo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>
         </button>
       </div>
     </div>
