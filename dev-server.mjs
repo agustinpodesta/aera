@@ -37,7 +37,11 @@ async function file(res, url) {
   try {
     if ((await stat(path)).isDirectory()) path = join(path, 'index.html');
     const body = await readFile(path);
-    res.writeHead(200, { 'Content-Type': TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
+    res.writeHead(200, {
+      'Content-Type': TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream',
+      'Content-Length': body.length, // fixed length: avoids flaky chunked transfers of large photos
+      'Cache-Control': 'no-store',
+    });
     res.end(body);
   } catch {
     send(res, 404, 'Not found');

@@ -33,10 +33,10 @@ export const COLORS = {
 const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
 
 // The AERA wordmark: Syne ExtraBold, tracked out.
-const WORDMARK = { font: `800 28px "Syne", sans-serif`, spacing: 2.4 };
-const WORDMARK_GAP = 62;   // footer baseline → wordmark baseline
+const WORDMARK = { font: `800 46px "Syne", sans-serif`, spacing: 4 };
+const WORDMARK_GAP = 80;   // footer baseline → wordmark baseline
 const ICON_GAP = 22;       // wordmark baseline → scene glyph top
-const OVERLAY_ALPHA = 0.8; // the whole strip sits slightly into the photo
+const OVERLAY_ALPHA = 0.6; // the whole strip sits into the photo
 
 const STRIP_W = 600;
 const X0 = (W - STRIP_W) / 2;
