@@ -33,7 +33,10 @@ export const COLORS = {
 const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
 
 // The AERA wordmark: Syne ExtraBold, tracked out.
-const WORDMARK = { font: `800 70px "Syne", sans-serif`, spacing: 6 };
+const WORDMARK = { font: `800 28px "Syne", sans-serif`, spacing: 2.4 };
+const WORDMARK_GAP = 62;   // footer baseline → wordmark baseline
+const ICON_GAP = 22;       // wordmark baseline → scene glyph top
+const OVERLAY_ALPHA = 0.8; // the whole strip sits slightly into the photo
 
 const STRIP_W = 600;
 const X0 = (W - STRIP_W) / 2;
@@ -75,7 +78,7 @@ export function compose(canvas, { photo, reading, scene = null }) {
   const rows = buildRows(reading);
   const rowsH = rows.reduce((h, r) => h + (r.lines.length > 1 ? ROW_H_2 : ROW_H), 0);
   //           rule  rows   rule+source  wordmark  scene
-  const total = 34 + rowsH + 40 + 96 + (scene ? 26 + ICON : 0);
+  const total = 34 + rowsH + 40 + WORDMARK_GAP + (scene ? ICON_GAP + ICON : 0);
   const top = STRIP_BOTTOM - total;
 
   drawScrim(ctx, top);
@@ -143,6 +146,7 @@ function buildRows(r) {
 
 function drawStrip(ctx, r, rows, top, scene) {
   ctx.save();
+  ctx.globalAlpha = OVERLAY_ALPHA;
   ctx.shadowColor = 'rgba(0,0,0,0.5)';
   ctx.shadowBlur = 16;
   ctx.shadowOffsetY = 2;
@@ -197,7 +201,7 @@ function drawStrip(ctx, r, rows, top, scene) {
   fitLine(ctx, footer, y, 22, r.sample ? 26 : 0);
 
   // Wordmark, centred
-  y += 96;
+  y += WORDMARK_GAP;
   ctx.font = WORDMARK.font;
   ctx.fillStyle = COLORS.paper;
   spaced(ctx, 'AERA', W / 2, y, WORDMARK.spacing, 'center');
@@ -205,7 +209,7 @@ function drawStrip(ctx, r, rows, top, scene) {
   // Scene glyph under the wordmark
   if (scene) {
     ctx.strokeStyle = COLORS.paper;
-    drawScene(ctx, scene, W / 2, y + 26, ICON);
+    drawScene(ctx, scene, W / 2, y + ICON_GAP, ICON);
   }
   ctx.restore();
 }
