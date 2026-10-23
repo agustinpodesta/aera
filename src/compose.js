@@ -33,8 +33,8 @@ export const COLORS = {
 const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
 
 // The AERA wordmark: Syne ExtraBold, tracked out.
-const WORDMARK = { font: `800 46px "Syne", sans-serif`, spacing: 4 };
-const WORDMARK_GAP = 80;   // footer baseline → wordmark baseline
+const WORDMARK = { font: `800 44px "Syne", sans-serif`, spacing: 3.8 };
+const WORDMARK_GAP = 78;   // footer baseline → wordmark baseline
 const ICON_GAP = 22;       // wordmark baseline → scene glyph top
 const OVERLAY_ALPHA = 0.6; // the whole strip sits into the photo
 
@@ -214,17 +214,13 @@ function drawStrip(ctx, r, rows, top, scene) {
   ctx.restore();
 }
 
-// Filled AQI colour with a thin paper ring so dark greens/purples still read on dark photos.
+// Solid AQI colour, no ring; the strip's soft shadow keeps it apart from the photo.
 function drawDot(ctx, cx, cy, color) {
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, DOT_R, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = COLORS.paper;
-  ctx.stroke();
   ctx.restore();
 }
 

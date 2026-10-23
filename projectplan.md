@@ -19,6 +19,7 @@
 - [x] v3: AQI colour dot (dark green ≤15 · green ≤33 · light green ≤50 · yellow · orange · red · purple · dark purple); scale ruler removed; AERA wordmark centred at the bottom (Unbounded / Syne / Michroma candidates); scene glyph under it (city, neighborhood, coast, countryside, mountains, forest), picked by hand in the studio
 - [x] Wordmark locked: Syne ExtraBold. **Template locked** (22 Oct 2026)
 - [x] Tweak (23 Oct): wordmark 35% smaller (70 → 46 px), whole strip at 60% opacity (scrim unchanged)
+- [x] Tweak (23 Oct): AQI dot is solid colour (no white ring); wordmark 5% smaller (46 → 44 px)
 - [ ] Consider (P1): drag strip up/down so it doesn't cover the subject
 
 ## Milestone 2 — Working camera
