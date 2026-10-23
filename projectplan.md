@@ -30,9 +30,11 @@
 - [x] Preview screen: composed image, Auto scene + one-tap override chips, Retake
 - [x] Export JPEG (0.92) prepared ahead of the tap; "Save or share" via Web Share when files are shareable, else Download
 - [x] Verified in browser at 375px with a simulated camera stream (pane blocks real cameras)
-- [x] Git + private GitHub repo (github.com/agustinpodesta/aera) + Vercel project `aera` (CLI-deployed, not git-connected; behind Vercel login)
+- [x] Git + private GitHub repo (github.com/agustinpodesta/aera) + Vercel project `aera` (CLI-deployed with `vercel deploy --prod`, not git-connected)
+- [x] Public, no sign-in: Vercel login protection turned off; live at https://aeracam.vercel.app (alias — re-run `vercel alias set <deployment> aeracam.vercel.app` after each deploy until aeracam.com is attached)
+- [x] Frictionless flow (PixelCam-style): link opens straight into the camera; start screen only as fallback; Share is the primary button, save icon beside it; back = retake
 - [x] Deployed: app, studio and /api/scene verified live; PRD/plan/dev server/photos excluded (404)
-- [ ] **Test on a real phone over HTTPS** — open https://aera-99vqqbx0n-agustinpodesta98-6708s-projects.vercel.app signed in to Vercel
+- [ ] **Test on a real phone** — https://aeracam.vercel.app (iPhone Safari + Android Chrome: camera, shutter, Share → Instagram Story)
 - [ ] Live captures get no scene until M3 adds geolocation; images still say SAMPLE DATA until M3
 
 ## Milestone 3 — Real air-quality data
