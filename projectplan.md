@@ -33,7 +33,7 @@
 - [x] Export JPEG (0.92) prepared ahead of the tap; "Save or share" via Web Share when files are shareable, else Download
 - [x] Verified in browser at 375px with a simulated camera stream (pane blocks real cameras)
 - [x] Git + private GitHub repo (github.com/agustinpodesta/aera) + Vercel project `aera` (CLI-deployed with `vercel deploy --prod`, not git-connected)
-- [x] Public, no sign-in: Vercel login protection turned off; live at https://aeracam.vercel.app (alias — re-run `vercel alias set <deployment> aeracam.vercel.app` after each deploy until aeracam.com is attached)
+- [x] Public, no sign-in: Vercel login protection turned off; live at https://aeracam.vercel.app (attached as a project domain, so it follows every production deploy)
 - [x] Frictionless flow (PixelCam-style): link opens straight into the camera; start screen only as fallback; Share is the primary button, save icon beside it; back = retake
 - [x] Deployed: app, studio and /api/scene verified live; PRD/plan/dev server/photos excluded (404)
 - [ ] **Test on a real phone** — https://aeracam.vercel.app (iPhone Safari + Android Chrome: camera, shutter, Share → Instagram Story)
@@ -52,7 +52,7 @@
 - [x] App preview screen: Auto scene + one-tap override
 - [ ] Before launch: Open-Meteo free tier is non-commercial (10k calls/day) — buy API plan or switch elevation source; add OSM attribution ("© OpenStreetMap contributors") on the about/credits page
 
-- [ ] **IQAir key**: Agustín adds `IQAIR_API_KEY` in Vercel; verify live readings say DATA IQAIR
+- [x] IQAir key added in Vercel (Production); live readings verified as IQAir city readings (Seoul AQI 39 vs model 89 — model is only the fallback)
 
 ## Milestone 4 — Sharing & testing
 - [x] Web Share API with File (capability-detected) — basic version shipped in M2; test on devices
