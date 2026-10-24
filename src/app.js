@@ -10,7 +10,7 @@ import { savePhoto, listPhotos, getPhoto, deletePhoto } from './gallery.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
-const RECENT_MS = 60 * 60e3; // a photo taken within this counts as "now" (current air, current place)
+const RECENT_MS = 60 * 60e3; // older photos get TIME = now, since their reading is the air now
 
 // Websites can't write to the Photos library directly. On iOS the only route is the
 // share sheet's "Save Image"; on Android a download lands in the phone's gallery.
@@ -97,27 +97,27 @@ async function onCapture(e) {
   if (!shot) return;
   const [here, taken] = await Promise.all([locateHere(), photoTakenAt(f)]);
   if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
-  if (here.gps) return loadPlace(shot, here.gps, here);
-  loadPlace(shot, await photoGps(f)); // location off: fall back to the photo's own GPS, if any
+  if (here.gps) return loadPlace(shot, here.gps, here, 'here');
+  const gps = await photoGps(f); // location off: fall back to the photo's own GPS, if any
+  loadPlace(shot, gps, {}, gps ? 'photo' : null);
 }
 
-// A photo from the camera roll. Just taken (the best-quality route: the camera app's own
-// file) → treat as now: current air, and your current place if the picker stripped GPS.
-// Older → its own GPS, and the air at the hour it was taken.
+// A photo from the camera roll: the place comes from its own GPS, the air is the air
+// there *now* (no reliable historical source). For an old photo the strip's TIME
+// becomes now too, so the report never claims to be from the day the photo was taken.
+// No GPS in the file (location was off, or the picker stripped it) → your current
+// place, flagged in the preview so you can change it.
 async function onFile(e) {
   const f = e.target.files?.[0];
   if (!f) return;
-  const shot = await openFile(f, { live: false });
+  const shot = await openFile(f, { live: true });
   if (!shot) return;
   const [gps, taken] = await Promise.all([photoGps(f), photoTakenAt(f)]);
   if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
-  if (Date.now() - shot.takenAt.getTime() <= RECENT_MS) {
-    shot.live = true;
-    const here = await locateHere();
-    if (gps) return loadPlace(shot, gps);
-    return loadPlace(shot, here.gps, here);
-  }
-  loadPlace(shot, gps);
+  if (Date.now() - shot.takenAt.getTime() > RECENT_MS) shot.reportAt = new Date();
+  if (gps) return loadPlace(shot, gps, {}, 'photo');
+  const here = await locateHere();
+  loadPlace(shot, here.gps, here, here.gps ? 'here' : null);
 }
 
 async function openFile(f, { live }) {
@@ -180,8 +180,9 @@ function drawTo(src, w, h) {
 /* ── Place → air + scene ──────────────────────────────────────────────── */
 
 // Live shots use the air now; imported photos use the hour they were taken.
-async function loadPlace(shot, gps, pre = {}) {
+async function loadPlace(shot, gps, pre = {}, source = null) {
   shot.gps = gps;
+  shot.gpsSource = gps ? source : null; // 'photo' | 'here' | 'search'
   shot.air = null;
   shot.detected = null;
   shot.loading = !!gps;
@@ -200,7 +201,9 @@ async function loadPlace(shot, gps, pre = {}) {
 const refresh = (shot) => { if (state.shot === shot) { renderPlace(); renderScenes(); render(); } };
 
 function readingFor(shot) {
-  const base = { takenAt: shot.takenAt, updatedAt: shot.takenAt, utcOffsetMin: shot.utcOffsetMin ?? null };
+  // Old photos report the air now, so TIME is now (device clock), not the photo's time.
+  const at = shot.reportAt ?? shot.takenAt;
+  const base = { takenAt: at, updatedAt: at, utcOffsetMin: shot.reportAt ? null : shot.utcOffsetMin ?? null };
   if (shot.loading) return { ...base, aqi: null, pending: true };
   if (!shot.air) return { ...base, aqi: null };
   return { ...base, ...shot.air };
@@ -385,13 +388,16 @@ function toast(text) {
 // One line under the photo: what the reading is, and a way to change the place.
 function renderPlace() {
   const shot = state.shot, el = $('place');
-  el.classList.toggle('ask', !shot.gps && !shot.loading);
+  // An older photo with no GPS of its own falls back to where you are: say so, and invite a change.
+  const guessed = shot.reportAt && shot.gpsSource === 'here';
+  el.classList.toggle('ask', (!shot.gps && !shot.loading) || (guessed && !shot.loading));
   if (shot.loading) { el.textContent = 'Reading the air…'; return; }
   if (!shot.gps) { el.textContent = 'Add where this was taken'; return; }
+  if (guessed && !shot.placeName) { el.textContent = 'No location in photo · set it'; return; }
   const air = shot.air;
-  const where = shot.placeName ?? air?.place ?? (shot.live ? 'Here' : 'Photo location');
+  const where = shot.placeName ?? air?.place ?? (shot.gpsSource === 'photo' ? 'Photo location' : 'Here');
   const what = !air ? 'air data unavailable'
-    : air.aqi == null ? 'no reading for that time'
+    : air.aqi == null ? 'no reading here right now'
     : air.scope === 'modeled' ? `${air.source}, modeled` : air.source;
   el.textContent = `${where} · ${what}`;
 }
@@ -457,7 +463,7 @@ async function choosePlace(p) {
   const shot = state.shot;
   if (!p.here) {
     shot.placeName = p.name;
-    loadPlace(shot, { lat: p.lat, lon: p.lon });
+    loadPlace(shot, { lat: p.lat, lon: p.lon }, {}, 'search');
     return;
   }
   shot.placeName = null;
@@ -470,7 +476,7 @@ async function choosePlace(p) {
     $('place').textContent = 'Location is off. Search a city instead.';
     return;
   }
-  loadPlace(shot, here.gps, shot.live ? here : {});
+  loadPlace(shot, here.gps, here, 'chosen-here');
 }
 
 $('placeQuery').addEventListener('input', (e) => {

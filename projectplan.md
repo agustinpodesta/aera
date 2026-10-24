@@ -69,6 +69,9 @@
 - [x] Sticker is automatic: chips hidden behind "Sticker: City · change"
 - [x] API caching: long on Vercel's CDN (cleared each deploy), browsers always revalidate (no stale scenes after fixes)
 - [x] Strip opacity 75%
+- [x] Old photos (per Agustín): place from the photo's GPS → the air there *now* + automatic sticker; the strip's TIME becomes now so the report never claims the photo's date. No GPS in the file → your current location, flagged "No location in photo · set it"
+- [ ] Verify on the Pixel whether the Android picker keeps photo GPS (preview says "Photo location" vs "No location in photo")
+- [ ] Option: drag the strip itself (Strava's Instagram sticker is movable because it uses the native Share-to-Stories sticker layer, which web apps can't use)
 
 ## Gallery (added 23 Oct, PXLCAM-style)
 - [x] On-device gallery (`src/gallery.js`, IndexedDB): every finished photo auto-saved (captured or imported); scene changes update the same entry
