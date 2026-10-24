@@ -25,7 +25,10 @@
         <img id="galleryThumb" alt="" hidden />
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></svg>
       </button>
-      <button class="shutter" id="shutter" aria-label="Take a photo"><span></span></button>
+      <div class="shutter-wrap">
+        <span class="tap-hint" id="tapHint" aria-hidden="true" hidden>Tap to begin</span>
+        <button class="shutter" id="shutter" aria-label="Take a photo"><span></span></button>
+      </div>
       <span class="icon-btn spacer" aria-hidden="true"></span>
     </div>
     <div class="home-alt">
@@ -41,7 +44,7 @@
   <section class="screen preview" id="preview" aria-label="Your air report" hidden>
     <div class="frame">
       <div class="stack" id="stack">
-        <span class="drag-hint" id="dragHint" hidden>Move the strip or the photo</span>
+        <span class="drag-hint" id="dragHint" hidden>Drag or pinch the strip and the photo</span>
         <canvas id="canvas" width="1080" height="1920" aria-hidden="true"></canvas>
         <img id="previewImg" alt="Your photo with its air report" hidden />
       </div>
@@ -54,6 +57,7 @@
       <div class="chips" id="scenes" role="group" aria-label="Sticker" hidden></div>
       <div class="actions row">
         <button class="btn ghost" id="retake">Retake</button>
+        <button class="icon-btn outline ink-btn" id="inkToggle" aria-label="Switch to black text"><span aria-hidden="true">Aa</span></button>
         <button class="btn primary" id="save" disabled>Share</button>
         <button class="icon-btn outline" id="download" aria-label="Save image" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14" /></svg>
@@ -68,10 +72,13 @@
       <button class="icon-btn" data-back aria-label="Back to camera">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
       </button>
-      <h1 id="galleryTitle">Your photos</h1>
-      <button class="icon-btn" data-pick aria-label="Import a photo from your phone">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-      </button>
+      <h1 id="galleryTitle" aria-live="polite">Your photos</h1>
+      <div class="head-actions">
+        <button class="text-btn" id="selectBtn">Select</button>
+        <button class="icon-btn" id="galleryImport" data-pick aria-label="Import a photo from your phone">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        </button>
+      </div>
     </header>
     <ul class="grid" id="grid"></ul>
     <div class="empty" id="galleryEmpty" hidden>
@@ -79,6 +86,10 @@
       <button class="btn ghost" data-pick>Import a photo</button>
     </div>
     <p class="fine gallery-note" id="galleryNote">Saved only on this device.</p>
+    <div class="select-bar" id="selectBar" hidden>
+      <button class="btn ghost" id="selDelete" disabled>Delete</button>
+      <button class="btn primary" id="selShare" disabled>Share</button>
+    </div>
   </section>
 
   <!-- Viewer: one saved photo -->

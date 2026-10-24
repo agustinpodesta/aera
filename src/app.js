@@ -10,6 +10,7 @@ import { savePhoto, listPhotos, getPhoto, getEditable, deletePhoto } from './gal
 
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
+const MAX_ZOOM = 4;         // pinch-zoom limit for the photo
 const RECENT_MS = 60 * 60e3; // older photos get TIME = now, since their reading is the air now
 
 // Websites can't write to the Photos library directly. On iOS the only route is the
@@ -38,6 +39,7 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
 function show(screen) {
   for (const id of ['home', 'preview', 'gallery', 'viewer']) $(id).hidden = id !== screen;
+  if (screen !== 'gallery' && sel.on) setSelecting(false);
   if (screen !== 'preview') closeSheet();
   state.screen = screen;
 }
@@ -146,6 +148,7 @@ async function openFile(f, { live }) {
     takenAt: new Date(live ? Date.now() : f.lastModified || Date.now()),
     live, gps: null, air: null, detected: null, loading: true,
   };
+  markStarted();
   openPreview(shot);
   return shot;
 }
@@ -154,7 +157,7 @@ async function openFile(f, { live }) {
 // as it was: it records the air when the photo was made).
 function editState(shot) {
   return {
-    focus: shot.focus, strip: shot.strip, sceneChoice: state.scene,
+    focus: shot.focus, zoom: shot.zoom ?? 1, ink: shot.ink ?? 'light', strip: shot.strip, sceneChoice: state.scene,
     takenAt: +shot.takenAt, utcOffsetMin: shot.utcOffsetMin ?? null, reportAt: shot.reportAt ? +shot.reportAt : null,
     live: shot.live, gps: shot.gps, gpsSource: shot.gpsSource ?? null, placeName: shot.placeName ?? null,
     air: shot.air, detected: shot.detected,
@@ -171,7 +174,7 @@ async function openEditor(id) {
   const scale = exportScale(img);
   openPreview({
     id, img, original, originalSaved: true, src: workingCopy(img, scale), scale, fromGallery: true,
-    focus: e.focus, strip: e.strip, sceneChoice: e.sceneChoice,
+    focus: e.focus, zoom: e.zoom ?? 1, ink: e.ink ?? 'light', strip: e.strip, sceneChoice: e.sceneChoice,
     takenAt: new Date(e.takenAt), utcOffsetMin: e.utcOffsetMin, reportAt: e.reportAt ? new Date(e.reportAt) : undefined,
     live: e.live, gps: e.gps, gpsSource: e.gpsSource, placeName: e.placeName ?? undefined,
     air: e.air, detected: e.detected, loading: false, savedAt: new Date(meta.createdAt),
@@ -256,6 +259,7 @@ function openPreview(shot) {
   else if (history.state?.aera === 'gallery') history.replaceState({ aera: 'preview' }, '');
   else if (history.state?.aera !== 'preview') history.pushState({ aera: 'preview' }, '');
   $('retake').textContent = shot.fromGallery ? 'Delete' : 'Retake';
+  renderInk();
   show('preview');
   renderPlace();
   renderScenes();
@@ -268,8 +272,11 @@ const effectiveScene = () => (state.scene === 'auto' ? state.shot?.detected ?? n
 // While dragging, draw at 1080×1920 to keep it smooth; everything else at full export size.
 function draw() {
   const shot = state.shot;
+  const zoom = shot.zoom ?? 1;
   shot.stripBox = compose(canvas, {
-    photo: shot.src, focus: shot.focus, strip: shot.strip, scale: dragging ? 1 : shot.scale,
+    // Zoomed in, the final frame draws from the full-resolution original so it stays sharp.
+    photo: !dragging && zoom > 1.01 ? shot.img : shot.src,
+    focus: shot.focus, zoom, ink: shot.ink ?? 'light', strip: shot.strip, scale: dragging ? 1 : shot.scale,
     scene: effectiveScene(), reading: readingFor(shot),
   });
   shot.strip = { cx: shot.stripBox.cx, bottom: shot.stripBox.bottom, scale: shot.stripBox.scale }; // keep the clamped spot
@@ -326,11 +333,9 @@ const GRAB = 36; // extra grab margin around the strip, in 1080-wide layout unit
 let drag = null, dragging = false, drawQueued = false, hintTimer = 0;
 
 function setupDrag(shot) {
-  const { iw, ih, sw, sh } = coverCrop(shot.src);
-  const photoMovable = iw - sw >= 2 || ih - sh >= 2;
-  stack.classList.add('draggable'); // the strip can always move
+  stack.classList.add('draggable'); // the strip can always move; the photo can always zoom
   const hint = $('dragHint');
-  hint.textContent = photoMovable ? 'Move the strip or the photo' : 'Move or pinch the strip';
+  hint.textContent = 'Drag or pinch the strip and the photo';
   clearTimeout(hintTimer);
   hint.hidden = false;
   hint.classList.remove('fade');
@@ -369,24 +374,35 @@ stack.addEventListener('pointerdown', (e) => {
   if (!shot) return;
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-  // Second finger on the strip: pinch to resize (and move), like an Instagram sticker.
+  // Second finger: on the strip, pinch resizes it like an Instagram sticker;
+  // anywhere else, pinch zooms the photo.
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    if (drag?.mode === 'strip' || onStripAt(toLayout({ clientX: mid.x, clientY: mid.y }))) {
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    if (drag?.mode === 'strip' || (drag?.mode !== 'photo' && onStripAt(toLayout({ clientX: mid.x, clientY: mid.y })))) {
       const box = shot.stripBox;
       drag = {
-        mode: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), mid, layoutPerCss: W / stack.clientWidth,
+        mode: 'pinch', dist, mid, layoutPerCss: W / stack.clientWidth,
         scale: box.scale, cx: box.cx, cy: (box.top + box.bottom) / 2, unitH: (box.bottom - box.top) / box.scale,
       };
-      if (!dragging) beginDragging(e);
+    } else {
+      // Remember which point of the photo sits under the fingers, so it stays there.
+      const z0 = shot.zoom ?? 1, r = stack.getBoundingClientRect();
+      const { iw, ih, sw, sh } = coverCrop(shot.src, W, H, z0);
+      const u = (mid.x - r.left) / r.width, v = (mid.y - r.top) / r.height;
+      drag = {
+        mode: 'zoom', dist, z0, rect: r,
+        anchor: { x: (iw - sw) * shot.focus.x + u * sw, y: (ih - sh) * shot.focus.y + v * sh },
+      };
     }
+    if (!dragging) beginDragging(e);
     return;
   }
   if (pointers.size > 2) return;
 
   const p = toLayout(e), box = shot.stripBox;
-  const { iw, ih, sw, sh } = coverCrop(shot.src);
+  const { iw, ih, sw, sh } = coverCrop(shot.src, W, H, shot.zoom ?? 1);
   drag = {
     id: e.pointerId, x: e.clientX, y: e.clientY, mode: onStripAt(p) ? 'strip' : 'photo',
     focus: { ...shot.focus }, strip: { cx: box?.cx, bottom: box?.bottom, scale: box?.scale ?? 1 },
@@ -417,6 +433,21 @@ stack.addEventListener('pointermove', (e) => {
     return;
   }
 
+  if (drag.mode === 'zoom') {
+    if (pointers.size < 2) return;
+    const [a, b] = [...pointers.values()];
+    const zoom = Math.min(MAX_ZOOM, Math.max(1, drag.z0 * (Math.hypot(a.x - b.x, a.y - b.y) / drag.dist)));
+    const { iw, ih, sw, sh } = coverCrop(shot.src, W, H, zoom);
+    const u = ((a.x + b.x) / 2 - drag.rect.left) / drag.rect.width, v = ((a.y + b.y) / 2 - drag.rect.top) / drag.rect.height;
+    shot.zoom = zoom;
+    shot.focus = {
+      x: iw - sw >= 1 ? clamp01((drag.anchor.x - u * sw) / (iw - sw)) : 0.5,
+      y: ih - sh >= 1 ? clamp01((drag.anchor.y - v * sh) / (ih - sh)) : 0.5,
+    };
+    queueDraw();
+    return;
+  }
+
   if (e.pointerId !== drag.id) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!dragging) {
@@ -439,7 +470,7 @@ stack.addEventListener('pointermove', (e) => {
 function endDrag(e) {
   pointers.delete(e.pointerId);
   if (!drag) return;
-  const pinchOver = drag.mode === 'pinch' && pointers.size < 2;
+  const pinchOver = (drag.mode === 'pinch' || drag.mode === 'zoom') && pointers.size < 2;
   if (!pinchOver && e.pointerId !== drag.id) return;
   drag = null; // after a pinch, the finger left behind does nothing until lifted
   if (!dragging) return;
@@ -532,6 +563,21 @@ function renderScenes() {
     b.onclick = () => { state.scene = value; setScenePicker(false); renderScenes(); render(); };
     return b;
   }));
+}
+
+// White or black strip; black is for very bright photos (snow, sky, sand).
+function renderInk() {
+  const dark = state.shot?.ink === 'dark';
+  $('inkToggle').classList.toggle('dark', dark);
+  $('inkToggle').setAttribute('aria-label', dark ? 'Switch to white text' : 'Switch to black text');
+}
+
+function toggleInk() {
+  const shot = state.shot;
+  if (!shot) return;
+  shot.ink = shot.ink === 'dark' ? 'light' : 'dark';
+  renderInk();
+  render();
 }
 
 function setScenePicker(open) {
@@ -628,12 +674,92 @@ async function openGallery({ push = true } = {}) {
     img.src = url;
     img.alt = `${fmt.format(r.createdAt)}${r.aqi != null ? `, AQI ${r.aqi}` : ''}`;
     b.append(img);
-    b.onclick = () => (r.edit ? openEditor(r.id) : openViewer(r.id));
+    b.dataset.id = r.id;
+    b.onclick = () => {
+      if (b.dataset.longpressed) { delete b.dataset.longpressed; return; }
+      if (sel.on) toggleSelected(r.id);
+      else if (r.edit) openEditor(r.id);
+      else openViewer(r.id);
+    };
+    onLongPress(b, () => { if (!sel.on) setSelecting(true); toggleSelected(r.id); });
     li.append(b);
     return li;
   }));
   $('galleryEmpty').hidden = rows.length > 0;
   $('grid').hidden = rows.length === 0;
+  $('selectBtn').hidden = rows.length === 0;
+  renderSelection();
+}
+
+/* ── Gallery multi-select: share or delete several photos at once ─────── */
+
+const sel = { on: false, ids: new Set(), files: new Map() }; // files: id → File, loaded on select
+
+function setSelecting(on) {
+  sel.on = on;
+  if (!on) { sel.ids.clear(); sel.files.clear(); }
+  renderSelection();
+}
+
+function toggleSelected(id) {
+  if (sel.ids.has(id)) {
+    sel.ids.delete(id);
+    sel.files.delete(id);
+  } else {
+    sel.ids.add(id);
+    // Load the finished JPEG now, so Share can run straight inside the tap.
+    getPhoto(id).then((row) => {
+      if (row && sel.ids.has(id)) sel.files.set(id, new File([row.blob], row.name || 'aera.jpg', { type: 'image/jpeg' }));
+    }).catch(() => {});
+  }
+  renderSelection();
+}
+
+function renderSelection() {
+  const n = sel.ids.size;
+  $('gallery').classList.toggle('selecting', sel.on);
+  $('selectBtn').textContent = sel.on ? 'Cancel' : 'Select';
+  $('galleryTitle').textContent = !sel.on ? 'Your photos' : n ? `${n} selected` : 'Select photos';
+  $('selectBar').hidden = !sel.on;
+  $('selShare').disabled = $('selDelete').disabled = n === 0;
+  for (const b of $('grid').querySelectorAll('button[data-id]')) {
+    const picked = sel.ids.has(b.dataset.id);
+    b.classList.toggle('picked', picked);
+    if (sel.on) b.setAttribute('aria-pressed', String(picked));
+    else b.removeAttribute('aria-pressed');
+  }
+}
+
+async function shareSelected() {
+  const files = [...sel.ids].map((id) => sel.files.get(id)).filter(Boolean);
+  if (!files.length) return;
+  if (navigator.canShare?.({ files })) {
+    try { await navigator.share({ files }); } catch { /* closed the sheet */ }
+    return;
+  }
+  files.forEach(downloadFile);
+}
+
+async function deleteSelected() {
+  const n = sel.ids.size;
+  if (!n || !confirm(n === 1 ? 'Delete this photo from Aera?' : `Delete these ${n} photos from Aera?`)) return;
+  await Promise.all([...sel.ids].map((id) => deletePhoto(id).catch(() => {})));
+  setSelecting(false);
+  updateGalleryButton();
+  openGallery({ push: false });
+}
+
+// Press and hold a photo to start selecting, like a phone gallery.
+function onLongPress(el, fn, ms = 450) {
+  let timer = 0, start = null;
+  const clear = () => { clearTimeout(timer); timer = 0; };
+  el.addEventListener('pointerdown', (e) => {
+    start = { x: e.clientX, y: e.clientY };
+    timer = setTimeout(() => { timer = 0; el.dataset.longpressed = '1'; fn(); }, ms);
+  });
+  el.addEventListener('pointermove', (e) => { if (timer && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) clear(); });
+  for (const t of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(t, clear);
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
 async function openViewer(id, { push = true } = {}) {
@@ -691,11 +817,24 @@ for (const id of ['download', 'viewerSave']) $(id).setAttribute('aria-label', IS
 $('viewerDelete').addEventListener('click', removeViewed);
 document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => history.back()));
 $('place').addEventListener('click', openSheet);
+$('inkToggle').addEventListener('click', toggleInk);
+$('selectBtn').addEventListener('click', () => setSelecting(!sel.on));
+$('selShare').addEventListener('click', shareSelected);
+$('selDelete').addEventListener('click', deleteSelected);
 $('sceneToggle').addEventListener('click', () => setScenePicker($('scenes').hidden));
 $('sheetClose').addEventListener('click', closeSheet);
 $('capture').addEventListener('change', onCapture);
 $('file').addEventListener('change', onFile);
 document.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', pickPhoto));
+
+// "Tap to begin" floats over the shutter until the first photo is made.
+const STARTED_KEY = 'aera.started';
+const hasStarted = () => { try { return localStorage.getItem(STARTED_KEY) === '1'; } catch { return false; } };
+function markStarted() {
+  try { localStorage.setItem(STARTED_KEY, '1'); } catch { /* storage blocked: the hint just stays */ }
+  $('tapHint').hidden = true;
+}
+$('tapHint').hidden = hasStarted();
 
 // Ask for location as soon as Aera opens, so air + scene are ready when the photo comes back.
 locateHere();

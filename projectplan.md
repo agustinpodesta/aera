@@ -83,6 +83,10 @@
 - [x] Save to the phone's gallery: iOS → share sheet ("Save Image" → Photos, the only route Apple allows websites); Android → one-tap download into the gallery (Downloads) + confirmation toast; preview is a real JPEG so long-press "Save to Photos" / "Download image" works
 - [x] Gallery photos are editable: the original photo + edit state (crop, strip position/size, sticker, place, reading) are stored (IndexedDB v2 `original` store), so tapping a photo reopens it in the editor; saving updates the same entry; Retake becomes Delete there. Photos saved before this stay view-only
 - [x] No darkening band following the strip: an even 18% tint over the whole photo instead
+- [x] White / black strip text ("Aa" toggle in the editor); black uses a light tint + light halo for very bright photos
+- [x] Pinch-zoom the photo (1–4×, around the fingers, pan while pinching); zoomed exports draw from the full-res original
+- [x] Gallery multi-select: "Select" or long-press, then Share (several files in one share sheet) or Delete
+- [x] Home: "Tap to begin" bubble floating over the shutter until the first photo (localStorage), still under reduced motion
 - [ ] iPhone Safari may clear site storage after ~7 days unused → add PWA manifest + "Add to Home Screen" hint (M4)
 
 ## Milestone 4 — Sharing & testing

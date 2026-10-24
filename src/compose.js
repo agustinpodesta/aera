@@ -23,12 +23,15 @@ import { drawScene } from './scenes.js';
 export const W = 1080;
 export const H = 1920;
 
-export const COLORS = {
-  paper:  '#F2EDE4',
-  soft:   'rgba(242,237,228,0.9)',
-  faint:  'rgba(242,237,228,0.78)',
-  signal: '#E4572E',
+export const COLORS = { signal: '#E4572E' };
+
+// Strip ink. White (default) sits on a faint dark tint with a dark shadow; black, for
+// very bright photos (snow, sky, sand), sits on a faint light tint with a light halo.
+export const INKS = {
+  light: { paper: '#F2EDE4', soft: 'rgba(242,237,228,0.9)', faint: 'rgba(242,237,228,0.78)', shadow: 'rgba(0,0,0,0.5)', tint: 'rgba(10,14,12,0.18)' },
+  dark:  { paper: '#121310', soft: 'rgba(18,19,16,0.88)', faint: 'rgba(18,19,16,0.74)', shadow: 'rgba(255,255,255,0.5)', tint: 'rgba(255,255,255,0.14)' },
 };
+let INK = INKS.light; // set per compose() call
 
 const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
 
@@ -70,18 +73,21 @@ export async function ensureFonts() {
  * @param {string|null} [opts.scene]  key of SCENES in scenes.js, or null for none
  * @param {{x:number, y:number}} [opts.focus]  which part of the photo the 9:16 crop keeps (0..1, 0.5 = centre)
  * @param {number} [opts.scale]  pixel density: 1 = 1080×1920, 2 = 2160×3840. Layout stays in 1080×1920 units.
+ * @param {number} [opts.zoom]  photo zoom inside the 9:16 frame (1 = just covers it)
+ * @param {'light'|'dark'} [opts.ink]  white or black strip
  * @param {{cx:number, bottom:number, scale?:number}} [opts.strip]  where the strip sits and how big
  *   (layout units; scale 1 = 600 wide); clamped to SAFE
  * @returns {{cx:number, bottom:number, scale:number, left:number, right:number, top:number}} the strip's actual box
  */
-export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 }, scale = 1, strip = STRIP_HOME }) {
+export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 }, zoom = 1, ink = 'light', scale = 1, strip = STRIP_HOME }) {
+  INK = INKS[ink] ?? INKS.light;
   canvas.width = Math.round(W * scale);
   canvas.height = Math.round(H * scale);
   const ctx = canvas.getContext('2d');
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   ctx.imageSmoothingQuality = 'high';
 
-  if (photo) drawCover(ctx, photo, 0, 0, W, H, focus);
+  if (photo) drawCover(ctx, photo, 0, 0, W, H, focus, zoom);
   else drawPlaceholder(ctx, 0, 0, W, H);
 
   const rows = buildRows(reading);
@@ -111,16 +117,17 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 /* ── Photo ────────────────────────────────────────────────────────────── */
 
-function drawCover(ctx, img, x, y, w, h, focus = { x: 0.5, y: 0.5 }) {
-  const { iw, ih, sw, sh } = coverCrop(img, w, h);
+// focus picks which part of the photo the crop keeps (0..1); zoom > 1 crops tighter.
+function drawCover(ctx, img, x, y, w, h, focus = { x: 0.5, y: 0.5 }, zoom = 1) {
+  const { iw, ih, sw, sh } = coverCrop(img, w, h, zoom);
   ctx.drawImage(img, (iw - sw) * focus.x, (ih - sh) * focus.y, sw, sh, x, y, w, h);
 }
 
 /** Source size and the crop (in source pixels) that covers a w×h frame. */
-export function coverCrop(img, w = W, h = H) {
+export function coverCrop(img, w = W, h = H, zoom = 1) {
   const iw = img.naturalWidth || img.videoWidth || img.width;
   const ih = img.naturalHeight || img.videoHeight || img.height;
-  const scale = Math.max(w / iw, h / ih);
+  const scale = Math.max(w / iw, h / ih) * zoom;
   return { iw, ih, sw: w / scale, sh: h / scale };
 }
 
@@ -152,7 +159,7 @@ function drawPlaceholder(ctx, x, y, w, h) {
 // A barely-there, even tint over the whole photo, so the strip reads anywhere without a
 // visible band following it around; the text shadow does the rest.
 function drawTint(ctx) {
-  ctx.fillStyle = 'rgba(10,14,12,0.18)';
+  ctx.fillStyle = INK.tint;
   ctx.fillRect(0, 0, W, H);
 }
 
@@ -171,7 +178,7 @@ function buildRows(r) {
 function drawStrip(ctx, r, rows, top, scene) {
   ctx.save();
   ctx.globalAlpha = OVERLAY_ALPHA;
-  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowColor = INK.shadow;
   ctx.shadowBlur = 16;
   ctx.shadowOffsetY = 2;
 
@@ -191,7 +198,7 @@ function drawStrip(ctx, r, rows, top, scene) {
     const lastBase = y + h - 26;
 
     ctx.font = `500 ${size}px ${MONO}`;
-    ctx.fillStyle = COLORS.paper;
+    ctx.fillStyle = INK.paper;
     row.lines.forEach((line, i) => {
       spaced(ctx, line, X1, lastBase - (row.lines.length - 1 - i) * lineH, 1, 'right');
     });
@@ -200,7 +207,7 @@ function drawStrip(ctx, r, rows, top, scene) {
       drawDot(ctx, X1 - valueW - 22 - DOT_R, lastBase - size * 0.36, row.dot);
     }
     ctx.font = LABEL;
-    ctx.fillStyle = COLORS.soft;
+    ctx.fillStyle = INK.soft;
     spaced(ctx, row.label, X0, lastBase, 4, 'left');
     y += h;
   }
@@ -224,18 +231,18 @@ function drawStrip(ctx, r, rows, top, scene) {
     ctx.fillStyle = COLORS.signal;
     ctx.fillRect(X0, y - 15, 14, 14);
   }
-  ctx.fillStyle = COLORS.faint;
+  ctx.fillStyle = INK.faint;
   fitLine(ctx, footer, y, 22, r.sample ? 26 : 0);
 
   // Wordmark, centred
   y += WORDMARK_GAP;
   ctx.font = WORDMARK.font;
-  ctx.fillStyle = COLORS.paper;
+  ctx.fillStyle = INK.paper;
   spaced(ctx, 'AERA', CX, y, WORDMARK.spacing, 'center');
 
   // Scene glyph under the wordmark
   if (scene) {
-    ctx.strokeStyle = COLORS.paper;
+    ctx.strokeStyle = INK.paper;
     drawScene(ctx, scene, CX, y + ICON_GAP, ICON);
   }
   ctx.restore();
@@ -254,7 +261,7 @@ function drawDot(ctx, cx, cy, color) {
 function dashed(ctx, y) {
   ctx.save();
   ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = COLORS.faint;
+  ctx.strokeStyle = INK.faint;
   ctx.lineWidth = 2;
   ctx.setLineDash([6, 8]);
   ctx.beginPath();
