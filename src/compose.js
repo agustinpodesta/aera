@@ -93,7 +93,7 @@ export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5
   const cx = clamp(strip.cx, SAFE.side + w / 2, W - SAFE.side - w / 2);
   const bottom = clamp(strip.bottom, SAFE.top + h, SAFE.bottom);
 
-  drawScrim(ctx, bottom - h, bottom);
+  drawTint(ctx);
   // Lay the strip out at size 1 around its bottom-centre anchor, then scale it there.
   CX = cx;
   X0 = cx - STRIP_W / 2;
@@ -149,17 +149,11 @@ function drawPlaceholder(ctx, x, y, w, h) {
   ridge(h * 0.8, 40, '#2A3B31', 0.4);
 }
 
-// A light band of darkening behind the strip, wherever it sits, so it reads on bright
-// photos (snow, sky, beach) without muddying the rest; the text shadow does most of the work.
-function drawScrim(ctx, top, bottom) {
-  const from = Math.max(0, top - 260), to = Math.min(H, bottom + 220);
-  const g = ctx.createLinearGradient(0, from, 0, to);
-  g.addColorStop(0, 'rgba(10,14,12,0)');
-  g.addColorStop(0.35, 'rgba(10,14,12,0.26)');
-  g.addColorStop(0.75, 'rgba(10,14,12,0.38)');
-  g.addColorStop(1, `rgba(10,14,12,${to >= H ? 0.38 : 0})`); // near the bottom edge, keep it to the edge
-  ctx.fillStyle = g;
-  ctx.fillRect(0, from, W, to - from);
+// A barely-there, even tint over the whole photo, so the strip reads anywhere without a
+// visible band following it around; the text shadow does the rest.
+function drawTint(ctx) {
+  ctx.fillStyle = 'rgba(10,14,12,0.18)';
+  ctx.fillRect(0, 0, W, H);
 }
 
 /* ── Strip ────────────────────────────────────────────────────────────── */

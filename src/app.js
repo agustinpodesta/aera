@@ -6,7 +6,7 @@
 import { compose, coverCrop, ensureFonts, W, H, STRIP_HOME } from './compose.js';
 import { SCENES } from './scenes.js';
 import { photoGps, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } from './location.js';
-import { savePhoto, listPhotos, getPhoto, deletePhoto } from './gallery.js';
+import { savePhoto, listPhotos, getPhoto, getEditable, deletePhoto } from './gallery.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
@@ -120,16 +120,21 @@ async function onFile(e) {
   loadPlace(shot, here.gps, here, here.gps ? 'here' : null);
 }
 
-async function openFile(f, { live }) {
+// The load event, not img.decode(): decode() can wait for a painted frame, which never
+// comes while the page is in the background (e.g. returning from the camera app).
+function loadImage(blob) {
   const img = new Image();
+  return new Promise((resolve, reject) => {
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = URL.createObjectURL(blob);
+  });
+}
+
+async function openFile(f, { live }) {
+  let img;
   try {
-    // The load event, not img.decode(): decode() can wait for a painted frame, which never
-    // comes while the page is in the background (e.g. returning from the camera app).
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = URL.createObjectURL(f);
-    });
+    img = await loadImage(f);
   } catch {
     show('home');
     notify('That photo couldn’t be opened. Try a JPEG or PNG.');
@@ -137,12 +142,40 @@ async function openFile(f, { live }) {
   }
   const scale = exportScale(img);
   const shot = {
-    id: newId(), img, src: workingCopy(img, scale), scale, focus: { x: 0.5, y: 0.5 }, strip: { ...STRIP_HOME },
+    id: newId(), img, original: f, src: workingCopy(img, scale), scale, focus: { x: 0.5, y: 0.5 }, strip: { ...STRIP_HOME },
     takenAt: new Date(live ? Date.now() : f.lastModified || Date.now()),
     live, gps: null, air: null, detected: null, loading: true,
   };
   openPreview(shot);
   return shot;
+}
+
+// Everything needed to reopen a photo's edit later from the gallery (the reading is kept
+// as it was: it records the air when the photo was made).
+function editState(shot) {
+  return {
+    focus: shot.focus, strip: shot.strip, sceneChoice: state.scene,
+    takenAt: +shot.takenAt, utcOffsetMin: shot.utcOffsetMin ?? null, reportAt: shot.reportAt ? +shot.reportAt : null,
+    live: shot.live, gps: shot.gps, gpsSource: shot.gpsSource ?? null, placeName: shot.placeName ?? null,
+    air: shot.air, detected: shot.detected,
+  };
+}
+
+// A gallery photo with its original kept → back into the editor; older ones open view-only.
+async function openEditor(id) {
+  const data = await getEditable(id).catch(() => null);
+  if (!data) return openViewer(id);
+  const { meta, original } = data, e = meta.edit;
+  let img;
+  try { img = await loadImage(original); } catch { return openViewer(id); }
+  const scale = exportScale(img);
+  openPreview({
+    id, img, original, originalSaved: true, src: workingCopy(img, scale), scale, fromGallery: true,
+    focus: e.focus, strip: e.strip, sceneChoice: e.sceneChoice,
+    takenAt: new Date(e.takenAt), utcOffsetMin: e.utcOffsetMin, reportAt: e.reportAt ? new Date(e.reportAt) : undefined,
+    live: e.live, gps: e.gps, gpsSource: e.gpsSource, placeName: e.placeName ?? undefined,
+    air: e.air, detected: e.detected, loading: false, savedAt: new Date(meta.createdAt),
+  });
 }
 
 // Export as sharp as the photo allows: a 12 MP phone photo's 9:16 crop is ~2300 px wide,
@@ -215,11 +248,14 @@ function readingFor(shot) {
 
 function openPreview(shot) {
   state.shot = shot;
-  state.scene = 'auto';
+  state.scene = shot.sceneChoice ?? 'auto';
   setScenePicker(false);
+  // Reopened from the gallery: back returns to the gallery, and Retake becomes Delete.
   // Imported from the gallery: replace that entry, so back from the preview goes home.
-  if (history.state?.aera === 'gallery') history.replaceState({ aera: 'preview' }, '');
+  if (shot.fromGallery) history.pushState({ aera: 'preview' }, '');
+  else if (history.state?.aera === 'gallery') history.replaceState({ aera: 'preview' }, '');
   else if (history.state?.aera !== 'preview') history.pushState({ aera: 'preview' }, '');
+  $('retake').textContent = shot.fromGallery ? 'Delete' : 'Retake';
   show('preview');
   renderPlace();
   renderScenes();
@@ -257,10 +293,12 @@ function prepareFile() {
     state.file = new File([blob], `aera-${stamp}.jpg`, { type: 'image/jpeg' });
     $('save').disabled = false;
     // Every finished photo lands in the on-device gallery; later edits update the same entry.
+    // The original goes in once; the edit state rides along every time, so it can be reopened.
+    const original = shot.originalSaved ? null : shot.original;
     savePhoto({
       id: shot.id, createdAt: (shot.savedAt ??= new Date()), aqi: shot.air?.aqi ?? null, scene: effectiveScene(),
-      canvas, blob, name: state.file.name,
-    }).then(updateGalleryButton).catch(() => {});
+      canvas, blob, name: state.file.name, edit: editState(shot), original,
+    }).then(() => { if (original) shot.originalSaved = true; updateGalleryButton(); }).catch(() => {});
     const share = canShareFile(state.file);
     $('save').textContent = share ? 'Share' : 'Download';
     $('download').hidden = !share; // with a share sheet, keep a one-tap "save to my photos" too
@@ -292,7 +330,7 @@ function setupDrag(shot) {
   const photoMovable = iw - sw >= 2 || ih - sh >= 2;
   stack.classList.add('draggable'); // the strip can always move
   const hint = $('dragHint');
-  hint.textContent = photoMovable ? 'Drag or pinch the strip · drag the photo' : 'Drag or pinch the strip';
+  hint.textContent = photoMovable ? 'Move the strip or the photo' : 'Move or pinch the strip';
   clearTimeout(hintTimer);
   hint.hidden = false;
   hint.classList.remove('fade');
@@ -590,7 +628,7 @@ async function openGallery({ push = true } = {}) {
     img.src = url;
     img.alt = `${fmt.format(r.createdAt)}${r.aqi != null ? `, AQI ${r.aqi}` : ''}`;
     b.append(img);
-    b.onclick = () => openViewer(r.id);
+    b.onclick = () => (r.edit ? openEditor(r.id) : openViewer(r.id));
     li.append(b);
     return li;
   }));
@@ -610,6 +648,13 @@ async function openViewer(id, { push = true } = {}) {
   const share = canShareFile(file);
   $('viewerShare').textContent = share ? 'Share' : 'Download';
   $('viewerSave').hidden = !share;
+}
+
+async function deleteEdited() {
+  if (!state.shot || !confirm('Delete this photo from Aera?')) return;
+  await deletePhoto(state.shot.id).catch(() => {});
+  updateGalleryButton();
+  history.back(); // back to the grid, which re-renders without it
 }
 
 async function removeViewed() {
@@ -636,7 +681,7 @@ async function updateGalleryButton() {
 /* ── Wiring ───────────────────────────────────────────────────────────── */
 
 $('shutter').addEventListener('click', openCamera);
-$('retake').addEventListener('click', openCamera); // the new photo replaces this one when it arrives
+$('retake').addEventListener('click', () => (state.shot?.fromGallery ? deleteEdited() : openCamera()));
 $('save').addEventListener('click', () => shareFile(state.file));
 $('download').addEventListener('click', () => saveToDevice(state.file));
 $('galleryBtn').addEventListener('click', () => openGallery());

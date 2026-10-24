@@ -208,7 +208,7 @@ body {
 .frame .stack.draggable { touch-action: none; cursor: grab; }
 .frame .stack.dragging { cursor: grabbing; }
 .drag-hint {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2;
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2; white-space: nowrap;
   padding: 6px 12px; border-radius: 999px; pointer-events: none;
   font: 400 12px var(--mono); letter-spacing: .04em; color: var(--paper);
   background: rgba(14, 15, 13, .6); transition: opacity .4s ease;
