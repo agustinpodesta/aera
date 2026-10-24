@@ -232,10 +232,17 @@ body {
 .scene-toggle[aria-expanded="true"]::after { content: " · done"; }
 .scene-toggle:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 
-/* ── White / black text toggle: shows the current strip ink ── */
-.ink-btn span { font: 800 16px/1 var(--brand); letter-spacing: .02em; }
-.ink-btn { color: var(--paper); }
-.ink-btn.dark { background: var(--paper); color: var(--night); border-color: var(--paper); }
+/* ── White / black text toggle: a half-white, half-black disc; it turns to put the
+   current text colour on the left, with a ring when black is on ── */
+.ink-btn span {
+  display: block; width: 24px; height: 24px; border-radius: 50%;
+  background: linear-gradient(90deg, var(--paper) 50%, #121310 50%);
+  box-shadow: 0 0 0 1.5px var(--paper-mute);
+  transition: transform .25s ease;
+}
+.ink-btn.dark span { transform: rotate(180deg); }
+.ink-btn.dark { border-color: var(--paper); }
+@media (prefers-reduced-motion: reduce) { .ink-btn span { transition: none; } }
 
 /* ── Gallery multi-select ── */
 .head-actions { display: flex; align-items: center; gap: 4px; }

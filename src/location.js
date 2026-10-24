@@ -18,6 +18,21 @@ export async function photoGps(src) {
   }
 }
 
+/**
+ * Like photoGps, but also says when the location was there and got blanked
+ * (Android's photo picker zeroes GPS for browsers), so the UI can explain it.
+ * @returns {Promise<{gps: {lat:number, lon:number}|null, hidden: boolean}>}
+ */
+export async function photoLocation(src) {
+  try {
+    const raw = await exifr.gps(src);
+    const gps = validCoords(raw?.latitude, raw?.longitude);
+    return { gps, hidden: !gps && raw != null && ('latitude' in raw || 'longitude' in raw) };
+  } catch {
+    return { gps: null, hidden: false };
+  }
+}
+
 export function validCoords(lat, lon) {
   lat = Number(lat);
   lon = Number(lon);

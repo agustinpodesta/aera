@@ -5,7 +5,7 @@
 
 import { compose, coverCrop, ensureFonts, W, H, STRIP_HOME } from './compose.js';
 import { SCENES } from './scenes.js';
-import { photoGps, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } from './location.js';
+import { photoGps, photoLocation, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } from './location.js';
 import { savePhoto, listPhotos, getPhoto, getEditable, deletePhoto } from './gallery.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
@@ -69,8 +69,26 @@ function openCamera() {
   $('capture').click();
 }
 
-function pickPhoto() {
+// Chrome on Android hands web pages a copy of picked photos with the GPS blanked (the
+// system photo picker redacts location for apps without media-location access, and
+// Chromium won't change that). The system Files picker serves the original file, so
+// on Android we open that when the browser supports it.
+const FILES_PICKER = IS_ANDROID && typeof window.showOpenFilePicker === 'function';
+
+async function pickPhoto() {
   notify('');
+  if (FILES_PICKER) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        multiple: false,
+        types: [{ description: 'Photos', accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'] } }],
+      });
+      return importFile(await handle.getFile());
+    } catch (err) {
+      if (err?.name === 'AbortError') return; // closed the picker
+      // Anything else (blocked, unsupported here): fall back to the regular picker.
+    }
+  }
   $('file').value = '';
   $('file').click();
 }
@@ -109,12 +127,16 @@ async function onCapture(e) {
 // becomes now too, so the report never claims to be from the day the photo was taken.
 // No GPS in the file (location was off, or the picker stripped it) → your current
 // place, flagged in the preview so you can change it.
-async function onFile(e) {
+function onFile(e) {
   const f = e.target.files?.[0];
-  if (!f) return;
+  if (f) importFile(f);
+}
+
+async function importFile(f) {
   const shot = await openFile(f, { live: true });
   if (!shot) return;
-  const [gps, taken] = await Promise.all([photoGps(f), photoTakenAt(f)]);
+  const [{ gps, hidden }, taken] = await Promise.all([photoLocation(f), photoTakenAt(f)]);
+  shot.gpsHidden = hidden;
   if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
   if (Date.now() - shot.takenAt.getTime() > RECENT_MS) shot.reportAt = new Date();
   if (gps) return loadPlace(shot, gps, {}, 'photo');
@@ -537,7 +559,10 @@ function renderPlace() {
   el.classList.toggle('ask', (!shot.gps && !shot.loading) || (guessed && !shot.loading));
   if (shot.loading) { el.textContent = 'Reading the air…'; return; }
   if (!shot.gps) { el.textContent = 'Add where this was taken'; return; }
-  if (guessed && !shot.placeName) { el.textContent = 'No location in photo · set it'; return; }
+  if (guessed && !shot.placeName) {
+    el.textContent = shot.gpsHidden ? 'Android hid the location · set it' : 'No location in photo · set it';
+    return;
+  }
   const air = shot.air;
   const where = shot.placeName ?? air?.place ?? (shot.gpsSource === 'photo' ? 'Photo location' : 'Here');
   const what = !air ? 'air data unavailable'
@@ -570,6 +595,7 @@ function renderInk() {
   const dark = state.shot?.ink === 'dark';
   $('inkToggle').classList.toggle('dark', dark);
   $('inkToggle').setAttribute('aria-label', dark ? 'Switch to white text' : 'Switch to black text');
+  $('inkToggle').setAttribute('aria-pressed', String(dark));
 }
 
 function toggleInk() {

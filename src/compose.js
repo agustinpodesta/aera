@@ -25,11 +25,11 @@ export const H = 1920;
 
 export const COLORS = { signal: '#E4572E' };
 
-// Strip ink. White (default) sits on a faint dark tint with a dark shadow; black, for
-// very bright photos (snow, sky, sand), sits on a faint light tint with a light halo.
+// Strip ink. White (default) has a dark shadow; black, for very bright photos (snow, sky,
+// sand), has a light halo. Both keep the same faint dark tint over the photo.
 export const INKS = {
   light: { paper: '#F2EDE4', soft: 'rgba(242,237,228,0.9)', faint: 'rgba(242,237,228,0.78)', shadow: 'rgba(0,0,0,0.5)', tint: 'rgba(10,14,12,0.18)' },
-  dark:  { paper: '#121310', soft: 'rgba(18,19,16,0.88)', faint: 'rgba(18,19,16,0.74)', shadow: 'rgba(255,255,255,0.5)', tint: 'rgba(255,255,255,0.14)' },
+  dark:  { paper: '#121310', soft: 'rgba(18,19,16,0.88)', faint: 'rgba(18,19,16,0.74)', shadow: 'rgba(255,255,255,0.5)', tint: 'rgba(10,14,12,0.18)' },
 };
 let INK = INKS.light; // set per compose() call
 
