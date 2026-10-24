@@ -1,14 +1,14 @@
-// Aera app: the link opens straight into the camera → shoot → preview → share.
-// The start screen is only a fallback when the camera can't start.
+// Aera app: home → the phone's own camera (full-quality photo) → preview → share.
+// The in-browser viewfinder was dropped: browsers only expose a video stream,
+// never the phone's photo pipeline (HDR+, Night Sight…), so photos looked flat.
 // Photos never leave the device; only rounded coordinates go to /api/air and /api/scene.
 
-import { compose, ensureFonts } from './compose.js';
+import { compose, coverCrop, ensureFonts, W, H } from './compose.js';
 import { SCENES } from './scenes.js';
-import { startCamera, stopCamera, captureFrame } from './camera.js';
 import { photoGps, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } from './location.js';
 import { savePhoto, listPhotos, getPhoto, deletePhoto } from './gallery.js';
 
-const HERE_TTL = 15 * 60e3; // re-locate if the camera has been open longer than this
+const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 
 // Websites can't write to the Photos library directly. On iOS the only route is the
 // share sheet's "Save Image"; on Android a download lands in the phone's gallery.
@@ -17,27 +17,25 @@ const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
 
 const $ = (id) => document.getElementById(id);
-const fontsReady = ensureFonts(); // loads alongside the camera; the first render waits for it
-const video = $('video');
+const fontsReady = ensureFonts(); // the first render waits for it
 const canvas = $('canvas');
 
 const state = {
-  screen: 'camera',
-  mirrored: false,
-  here: null,          // Promise<{ gps, at, air: Promise, scene: Promise }>: prefetched while framing
-  shot: null,          // { id, img, takenAt, utcOffsetMin, live, gps, placeName, air, detected, loading }
+  screen: 'home',
+  here: null,          // Promise<{ gps, at, air: Promise, scene: Promise }>: prefetched before the shot
+  shot: null,          // { id, img, src, focus, takenAt, utcOffsetMin, live, gps, placeName, air, detected, loading }
   scene: 'auto',       // 'auto' | SCENES key | null
   file: null,          // the exported JPEG, prepared ahead so Share stays inside the tap
   viewer: null,        // { id, file, url } for the gallery photo being viewed
 };
 
 const newId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
 /* ── Screens ──────────────────────────────────────────────────────────── */
 
 function show(screen) {
-  for (const id of ['start', 'camera', 'preview', 'gallery', 'viewer']) $(id).hidden = id !== screen;
-  if (screen !== 'camera') stopCamera(video);
+  for (const id of ['home', 'preview', 'gallery', 'viewer']) $(id).hidden = id !== screen;
   if (screen !== 'preview') closeSheet();
   state.screen = screen;
 }
@@ -47,100 +45,118 @@ function notify(text) {
   $('notice').hidden = !text;
 }
 
-// Camera is the root. Preview, gallery and viewer push history entries, so the
-// phone's back gesture walks back through them (preview → camera = retake).
+// Home is the root. Preview, gallery and viewer push history entries, so the
+// phone's back gesture walks back through them.
 window.addEventListener('popstate', () => {
   const to = history.state?.aera;
   if (to === 'gallery') return openGallery({ push: false });
   if (to === 'viewer') return openViewer(history.state.id, { push: false });
   if (to === 'preview' && state.shot) return show('preview');
-  if (state.screen !== 'camera') openCamera();
+  show('home');
 });
 
-/* ── Camera ───────────────────────────────────────────────────────────── */
+/* ── Camera (the phone's own) + location ──────────────────────────────── */
 
-async function openCamera() {
+// Must run inside the tap: browsers only open the camera from a user gesture.
+function openCamera() {
   notify('');
-  show('camera');
-  $('camera').classList.remove('live');
-  try {
-    const { mirrored } = await startCamera(video);
-    state.mirrored = mirrored;
-    video.classList.toggle('mirrored', mirrored);
-    $('camera').classList.add('live');
-    locateHere(); // ask for location while the user frames the shot
-  } catch (err) {
-    show('start');
-    notify(cameraError(err));
-  }
+  locateHere(); // refresh if stale; usually already done on load
+  $('capture').value = '';
+  $('capture').click();
 }
 
-function cameraError(err) {
-  switch (err?.name) {
-    case 'NotAllowedError': return 'Camera access is blocked. Allow it in your browser settings, or choose a photo instead.';
-    case 'NotFoundError':
-    case 'OverconstrainedError': return 'No camera found on this device. You can choose a photo instead.';
-    case 'NotReadableError': return 'Another app is using the camera. Close it and try again, or choose a photo.';
-    case 'NotSupportedError': return 'This browser can’t open the camera here. Choose a photo instead.';
-    default: return 'The camera couldn’t start. Choose a photo instead.';
-  }
+function pickPhoto() {
+  notify('');
+  $('file').value = '';
+  $('file').click();
 }
 
-// Locate once and prefetch air + scene, so the preview is usually instant.
+// Locate and prefetch air + scene, so the preview is ready when the photo arrives.
+// Reuses a fresh fix; retries when the last attempt failed or went stale.
 function locateHere(force = false) {
-  if (!force && state.here) return state.here;
-  state.here = locateMe().then((gps) => ({
+  const fresh = () => locateMe().then((gps) => ({
     gps,
     at: Date.now(),
     air: gps ? fetchAir(gps) : null,
     scene: gps ? fetchScene(gps).then((b) => b.scene ?? null) : null,
   }));
+  const prev = state.here;
+  state.here = !force && prev
+    ? prev.then((h) => (h.gps && Date.now() - h.at <= HERE_TTL ? h : fresh()))
+    : fresh();
   return state.here;
 }
 
-async function takePhoto() {
-  if (!video.videoWidth) return;
-  const img = captureFrame(video, state.mirrored);
-  stopCamera(video);
-  const shot = { id: newId(), img, takenAt: new Date(), live: true, gps: null, air: null, detected: null, loading: true };
-  openPreview(shot);
-  let here = await locateHere();
-  if (Date.now() - here.at > HERE_TTL) here = await locateHere(true);
-  loadPlace(shot, here.gps, here);
+// A photo just taken with the camera: use where you are now, and the air now.
+async function onCapture(e) {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const shot = await openFile(f, { live: true });
+  if (!shot) return;
+  const [here, taken] = await Promise.all([locateHere(), photoTakenAt(f)]);
+  if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
+  if (here.gps) return loadPlace(shot, here.gps, here);
+  loadPlace(shot, await photoGps(f)); // location off: fall back to the photo's own GPS, if any
 }
 
-// Release the camera when the tab is hidden; reopen it when the user comes back.
-document.addEventListener('visibilitychange', () => {
-  if (state.screen !== 'camera') return;
-  if (document.hidden) stopCamera(video);
-  else openCamera();
-});
-
-/* ── Photo upload fallback ────────────────────────────────────────────── */
-
-function pickPhoto() {
-  $('file').value = '';
-  $('file').click();
-}
-
+// A photo from the camera roll: its own GPS, and the air at the hour it was taken.
 async function onFile(e) {
   const f = e.target.files?.[0];
   if (!f) return;
+  const shot = await openFile(f, { live: false });
+  if (!shot) return;
+  const [gps, taken] = await Promise.all([photoGps(f), photoTakenAt(f)]);
+  if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
+  loadPlace(shot, gps);
+}
+
+async function openFile(f, { live }) {
   const img = new Image();
-  img.onload = async () => {
-    const shot = { id: newId(), img, takenAt: new Date(f.lastModified || Date.now()), live: false, gps: null, air: null, detected: null, loading: true };
-    openPreview(shot);
-    const [gps, taken] = await Promise.all([photoGps(f), photoTakenAt(f)]);
-    if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
-    loadPlace(shot, gps);
-  };
-  img.onerror = () => { show('start'); notify('That photo couldn’t be opened. Try a JPEG or PNG.'); };
   img.src = URL.createObjectURL(f);
+  try {
+    await img.decode();
+  } catch {
+    show('home');
+    notify('That photo couldn’t be opened. Try a JPEG or PNG.');
+    return null;
+  }
+  const shot = {
+    id: newId(), img, src: workingCopy(img), focus: { x: 0.5, y: 0.5 },
+    takenAt: new Date(live ? Date.now() : f.lastModified || Date.now()),
+    live, gps: null, air: null, detected: null, loading: true,
+  };
+  openPreview(shot);
+  return shot;
+}
+
+// Phone photos are 12+ MP; the story is 1080×1920. Scale once to just cover it, so
+// redraws (dragging the crop) are fast and the export is pixel-identical.
+function workingCopy(img) {
+  let { iw, ih } = coverCrop(img);
+  let scale = Math.max(W / iw, H / ih);
+  if (scale >= 1) return img;
+  let src = img;
+  // Halve in steps for a clean downscale, then land on the exact cover size.
+  while (scale < 0.5) {
+    iw = Math.round(iw / 2); ih = Math.round(ih / 2); scale *= 2;
+    src = drawTo(src, iw, ih);
+  }
+  return drawTo(src, Math.ceil(iw * scale), Math.ceil(ih * scale));
+}
+
+function drawTo(src, w, h) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, w, h);
+  return c;
 }
 
 /* ── Place → air + scene ──────────────────────────────────────────────── */
 
-// Live shots use the air now; uploaded photos use the hour they were taken.
+// Live shots use the air now; imported photos use the hour they were taken.
 async function loadPlace(shot, gps, pre = {}) {
   shot.gps = gps;
   shot.air = null;
@@ -172,20 +188,25 @@ function readingFor(shot) {
 function openPreview(shot) {
   state.shot = shot;
   state.scene = 'auto';
-  // Imported from the gallery: replace that entry, so back/Retake from the preview goes to the camera.
+  // Imported from the gallery: replace that entry, so back from the preview goes home.
   if (history.state?.aera === 'gallery') history.replaceState({ aera: 'preview' }, '');
   else if (history.state?.aera !== 'preview') history.pushState({ aera: 'preview' }, '');
   show('preview');
   renderPlace();
   renderScenes();
+  setupDrag(shot);
   fontsReady.finally(() => { if (state.shot === shot) render(); });
 }
 
 const effectiveScene = () => (state.scene === 'auto' ? state.shot?.detected ?? null : state.scene);
 
-function render() {
+function draw() {
   const shot = state.shot;
-  compose(canvas, { photo: shot.img, scene: effectiveScene(), reading: readingFor(shot) });
+  compose(canvas, { photo: shot.src, focus: shot.focus, scene: effectiveScene(), reading: readingFor(shot) });
+}
+
+function render() {
+  draw();
   prepareFile();
 }
 
@@ -196,12 +217,12 @@ function prepareFile() {
   const shot = state.shot;
   if (shot.loading) return; // never share a half-loaded reading
   canvas.toBlob((blob) => {
-    if (!blob || state.shot !== shot || shot.loading) return;
+    if (!blob || state.shot !== shot || shot.loading || dragging) return;
     const d = shot.takenAt, p2 = (n) => String(n).padStart(2, '0');
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
     state.file = new File([blob], `aera-${stamp}.jpg`, { type: 'image/jpeg' });
     $('save').disabled = false;
-    // Every finished photo lands in the on-device gallery; scene changes update the same entry.
+    // Every finished photo lands in the on-device gallery; later edits update the same entry.
     savePhoto({
       id: shot.id, createdAt: (shot.savedAt ??= new Date()), aqi: shot.air?.aqi ?? null, scene: effectiveScene(),
       canvas, blob, name: state.file.name,
@@ -225,6 +246,67 @@ function showPreviewImage(blob) {
 function hidePreviewImage() {
   $('previewImg').hidden = true;
 }
+
+/* ── Drag to frame: choose which part of the photo the 9:16 crop keeps ── */
+
+const stack = $('stack');
+let drag = null, dragging = false, drawQueued = false, hintTimer = 0;
+
+function setupDrag(shot) {
+  const { iw, ih, sw, sh } = coverCrop(shot.src);
+  const movable = iw - sw >= 2 || ih - sh >= 2;
+  stack.classList.toggle('draggable', movable);
+  const hint = $('dragHint');
+  clearTimeout(hintTimer);
+  hint.hidden = !movable;
+  hint.classList.remove('fade');
+  if (movable) hintTimer = setTimeout(() => hint.classList.add('fade'), 2500);
+}
+
+stack.addEventListener('pointerdown', (e) => {
+  const shot = state.shot;
+  if (!shot || !stack.classList.contains('draggable')) return;
+  const { iw, ih, sw, sh } = coverCrop(shot.src);
+  drag = {
+    id: e.pointerId, x: e.clientX, y: e.clientY, start: { ...shot.focus },
+    slackX: iw - sw, slackY: ih - sh, srcPerCss: sw / stack.clientWidth,
+  };
+});
+
+stack.addEventListener('pointermove', (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!dragging) {
+    if (Math.hypot(dx, dy) < 6) return; // a tap or long-press (save), not a drag
+    dragging = true;
+    stack.classList.add('dragging');
+    $('dragHint').classList.add('fade');
+    hidePreviewImage(); // show the live canvas while the crop moves
+    try { stack.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+  }
+  // Dragging the photo right reveals more of its left side, so the focus moves left.
+  state.shot.focus = {
+    x: drag.slackX >= 2 ? clamp01(drag.start.x - (dx * drag.srcPerCss) / drag.slackX) : 0.5,
+    y: drag.slackY >= 2 ? clamp01(drag.start.y - (dy * drag.srcPerCss) / drag.slackY) : 0.5,
+  };
+  if (!drawQueued) {
+    drawQueued = true;
+    requestAnimationFrame(() => { drawQueued = false; draw(); });
+  }
+});
+
+function endDrag(e) {
+  if (!drag || e.pointerId !== drag.id) return;
+  drag = null;
+  if (!dragging) return;
+  dragging = false;
+  stack.classList.remove('dragging');
+  render(); // final frame → JPEG → gallery
+}
+stack.addEventListener('pointerup', endDrag);
+stack.addEventListener('pointercancel', endDrag);
+
+/* ── Share / save ─────────────────────────────────────────────────────── */
 
 const canShareFile = (file) => !!navigator.canShare?.({ files: [file] });
 
@@ -419,7 +501,7 @@ async function removeViewed() {
   history.back(); // back to the grid, which re-renders without it
 }
 
-// The camera's gallery button shows your latest photo, like a phone camera.
+// The home screen's gallery button shows your latest photo, like a phone camera.
 async function updateGalleryButton() {
   const thumb = $('galleryThumb');
   try {
@@ -435,9 +517,8 @@ async function updateGalleryButton() {
 
 /* ── Wiring ───────────────────────────────────────────────────────────── */
 
-$('openCamera').addEventListener('click', openCamera);
-$('shutter').addEventListener('click', takePhoto);
-$('retake').addEventListener('click', () => (history.state?.aera === 'preview' ? history.back() : openCamera()));
+$('shutter').addEventListener('click', openCamera);
+$('retake').addEventListener('click', openCamera); // the new photo replaces this one when it arrives
 $('save').addEventListener('click', () => shareFile(state.file));
 $('download').addEventListener('click', () => saveToDevice(state.file));
 $('galleryBtn').addEventListener('click', () => openGallery());
@@ -448,9 +529,10 @@ $('viewerDelete').addEventListener('click', removeViewed);
 document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => history.back()));
 $('place').addEventListener('click', openSheet);
 $('sheetClose').addEventListener('click', closeSheet);
+$('capture').addEventListener('change', onCapture);
 $('file').addEventListener('change', onFile);
 document.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', pickPhoto));
 
-// Straight into the camera: the browser's permission prompt is the only step.
-openCamera();
+// Ask for location as soon as Aera opens, so air + scene are ready when the photo comes back.
+locateHere();
 updateGalleryButton();

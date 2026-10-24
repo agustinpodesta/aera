@@ -54,6 +54,13 @@
 
 - [x] IQAir key added in Vercel (Production); live readings verified as IQAir city readings (Seoul AQI 39 vs model 89 — model is only the fallback)
 
+## Camera quality (24 Oct)
+- [x] Diagnosis: in-browser camera = 1080p video frame, no HDR+, cropped FOV; Pixel camera = 12.5 MP processed photo
+- [x] Shutter now opens the phone's own camera (`<input capture="environment">`): full quality, no camera-permission prompt; in-browser viewfinder removed (`src/camera.js` deleted)
+- [x] Home screen: wordmark, shutter, latest-photo gallery button, import; location asked on open and prefetched (retries if it failed or went stale)
+- [x] Preview: drag to reposition the 9:16 crop (photo scaled once to just cover 1080×1920, so redraws are fast and export is identical); "Drag to frame" hint
+- [ ] Scene detector: Hwahongmun, Suwon (37.287, 127.018) reads as Mountains — should be City; recalibrate (city places + relief rule)
+
 ## Gallery (added 23 Oct, PXLCAM-style)
 - [x] On-device gallery (`src/gallery.js`, IndexedDB): every finished photo auto-saved (captured or imported); scene changes update the same entry
 - [x] Camera bar: last-photo thumbnail opens the gallery (left), import a photo (right)

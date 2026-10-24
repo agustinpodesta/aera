@@ -13,45 +13,31 @@
   <link rel="stylesheet" href="src/app.css" />
 </head>
 <body>
-  <!-- Fallback when the camera can't start -->
-  <section class="screen start" id="start" aria-label="Aera" hidden>
-    <div class="start-inner">
+  <!-- Home: the shutter opens the phone's own camera (full-quality photos) -->
+  <section class="screen home" id="home" aria-label="Aera">
+    <div class="home-inner">
       <h1 class="wordmark">AERA</h1>
-      <p class="pitch">Your camera captures what a place looks like. This one captures the air, too.</p>
+      <p class="pitch">Take a photo. Aera adds the air you’re breathing.</p>
       <p class="notice" id="notice" role="status" hidden></p>
-      <div class="actions">
-        <button class="btn primary" id="openCamera">Try the camera again</button>
-        <button class="btn ghost" data-pick>Choose a photo</button>
-      </div>
-      <p class="fine">Photos stay on your device.</p>
-    </div>
-  </section>
-
-  <!-- Camera -->
-  <section class="screen camera" id="camera" aria-label="Camera">
-    <div class="viewfinder">
-      <video id="video" playsinline muted aria-label="Camera preview"></video>
-      <div class="vf-wait" aria-hidden="true">
-        <span class="wordmark small">AERA</span>
-        <span>Allow the camera to start</span>
-      </div>
     </div>
     <div class="camera-bar">
       <button class="gallery-btn" id="galleryBtn" aria-label="Your photos">
         <img id="galleryThumb" alt="" hidden />
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></svg>
       </button>
-      <button class="shutter" id="shutter" aria-label="Take photo"><span></span></button>
+      <button class="shutter" id="shutter" aria-label="Take a photo"><span></span></button>
       <button class="icon-btn" data-pick aria-label="Import a photo from your phone">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M5 17l5-5 3 3 2.5-2.5L19 16" /></svg>
       </button>
     </div>
+    <p class="fine home-note">Photos stay on your device.</p>
   </section>
 
   <!-- Preview -->
   <section class="screen preview" id="preview" aria-label="Your air report" hidden>
     <div class="frame">
-      <div class="stack">
+      <div class="stack" id="stack">
+        <span class="drag-hint" id="dragHint" hidden>Drag to frame</span>
         <canvas id="canvas" width="1080" height="1920" aria-hidden="true"></canvas>
         <img id="previewImg" alt="Your photo with its air report" hidden />
       </div>
@@ -122,6 +108,7 @@
   </div>
 
   <p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
+  <input id="capture" type="file" accept="image/*" capture="environment" hidden />
   <input id="file" type="file" accept="image/*" hidden />
   <script type="module" src="src/app.js"></script>
 </body>

@@ -9,8 +9,8 @@ npm run dev        # http://localhost:8120 — static pages + /api functions
 ```
 
 ## Files
-- `index.html`, `src/app.js`, `src/app.css` — the app: start → camera → preview → save/share
-- `src/camera.js` — getUserMedia start/stop/capture
+- `index.html`, `src/app.js`, `src/app.css` — the app: home → phone camera → preview (drag to frame) → share/save
+- The shutter uses `<input capture>`: the phone's own camera app takes the photo (full quality, HDR)
 - `src/gallery.js` — on-device gallery (IndexedDB): save, list, get, delete
 - `src/location.js` — EXIF GPS + capture time (on-device), `/api/scene` client
 - `src/compose.js` — the template: draws the 1080×1920 air report on a canvas

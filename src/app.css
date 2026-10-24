@@ -53,12 +53,7 @@ body {
 .icon-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .icon-btn.spacer { background: none; }
 
-/* ── Start ── */
-.start { justify-content: center; }
-.start-inner {
-  width: 100%; max-width: 420px; margin: 0 auto; padding: 32px 24px;
-  display: flex; flex-direction: column; gap: 22px;
-}
+/* ── Brand text ── */
 .wordmark { margin: 0 0 8px; font: 800 clamp(56px, 18vw, 84px)/1 var(--brand); letter-spacing: .06em; }
 .pitch { margin: 0; font-size: 16px; line-height: 1.55; color: var(--paper-mute); max-width: 32ch; }
 .notice {
@@ -73,30 +68,17 @@ body {
 .icon-btn.outline { flex: none; width: 52px; height: 52px; background: transparent; border: 1px solid var(--hair); }
 .fine { margin: 0; font-size: 12px; color: var(--paper-mute); letter-spacing: .04em; }
 
-/* ── Camera ── */
-.camera { justify-content: center; background: #000; }
-.viewfinder {
-  position: relative;
-  width: min(100%, calc((100dvh - 132px) * 9 / 16));
-  aspect-ratio: 9 / 16;
-  margin: 0 auto;
-  overflow: hidden;
-  background: var(--night-2);
+/* ── Home ── */
+.home { justify-content: space-between; }
+.home-inner {
+  flex: 1; width: 100%; max-width: 420px; margin: 0 auto; padding: 32px 24px;
+  display: flex; flex-direction: column; justify-content: center; gap: 18px;
 }
-.viewfinder video { width: 100%; height: 100%; object-fit: cover; display: block; }
-.viewfinder video.mirrored { transform: scaleX(-1); }
-.vf-wait {
-  position: absolute; inset: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-  color: var(--paper-mute); font-size: 13px; letter-spacing: .04em; text-align: center; padding: 24px;
-  transition: opacity .3s ease;
-}
-.wordmark.small { font: 800 34px/1 var(--brand); letter-spacing: .06em; color: var(--paper); }
-.camera.live .vf-wait { opacity: 0; pointer-events: none; }
 .camera-bar {
   display: flex; align-items: center; justify-content: space-around;
   height: 112px; flex: none;
 }
+.home-note { text-align: center; padding: 0 16px 16px; }
 .shutter {
   width: 76px; height: 76px; padding: 6px;
   border-radius: 50%; border: 3px solid var(--paper); background: transparent; cursor: pointer;
@@ -221,3 +203,14 @@ body {
   font: 400 13px/1.4 var(--mono); color: var(--night); text-align: center;
   background: var(--paper); border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, .4);
 }
+
+/* ── Drag to frame ── */
+.frame .stack.draggable { touch-action: none; cursor: grab; }
+.frame .stack.dragging { cursor: grabbing; }
+.drag-hint {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2;
+  padding: 6px 12px; border-radius: 999px; pointer-events: none;
+  font: 400 12px var(--mono); letter-spacing: .04em; color: var(--paper);
+  background: rgba(14, 15, 13, .6); transition: opacity .4s ease;
+}
+.drag-hint.fade { opacity: 0; }

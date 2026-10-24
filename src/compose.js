@@ -66,13 +66,14 @@ export async function ensureFonts() {
  * @param {object} opts.reading  { aqi, scope, source, updatedAt, takenAt, timeZone, utcOffsetMin, sample }
  *   Time zone: utcOffsetMin (from photo EXIF) wins, then the IANA timeZone, else the device's.
  * @param {string|null} [opts.scene]  key of SCENES in scenes.js, or null for none
+ * @param {{x:number, y:number}} [opts.focus]  which part of the photo the 9:16 crop keeps (0..1, 0.5 = centre)
  */
-export function compose(canvas, { photo, reading, scene = null }) {
+export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 } }) {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  if (photo) drawCover(ctx, photo, 0, 0, W, H);
+  if (photo) drawCover(ctx, photo, 0, 0, W, H, focus);
   else drawPlaceholder(ctx, 0, 0, W, H);
 
   const rows = buildRows(reading);
@@ -88,12 +89,17 @@ export function compose(canvas, { photo, reading, scene = null }) {
 
 /* ── Photo ────────────────────────────────────────────────────────────── */
 
-function drawCover(ctx, img, x, y, w, h) {
+function drawCover(ctx, img, x, y, w, h, focus = { x: 0.5, y: 0.5 }) {
+  const { iw, ih, sw, sh } = coverCrop(img, w, h);
+  ctx.drawImage(img, (iw - sw) * focus.x, (ih - sh) * focus.y, sw, sh, x, y, w, h);
+}
+
+/** Source size and the crop (in source pixels) that covers a w×h frame. */
+export function coverCrop(img, w = W, h = H) {
   const iw = img.naturalWidth || img.videoWidth || img.width;
   const ih = img.naturalHeight || img.videoHeight || img.height;
   const scale = Math.max(w / iw, h / ih);
-  const sw = w / scale, sh = h / scale;
-  ctx.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, x, y, w, h);
+  return { iw, ih, sw: w / scale, sh: h / scale };
 }
 
 // Stand-in landscape so the layout reads before a photo is chosen.
