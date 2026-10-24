@@ -14,8 +14,8 @@
 // Fallback (Open-Meteo) readings say "(MODELED)" after the source so a model
 // estimate never passes for a measurement.
 //
-// Instagram covers roughly the top and bottom 250px of a Story (Meta: ~14%), so the
-// strip is anchored to end at STRIP_BOTTOM, clear of the reply bar.
+// The strip can be dragged anywhere, but is clamped to Instagram's Story safe area:
+// IG covers roughly the top and bottom 250px (Meta: ~14%), so it stays between them.
 
 import { aqiCategory, aqiDotColor } from './aqi.js';
 import { drawScene } from './scenes.js';
@@ -39,9 +39,10 @@ const ICON_GAP = 22;       // wordmark baseline → scene glyph top
 const OVERLAY_ALPHA = 0.75; // the whole strip sits into the photo
 
 const STRIP_W = 600;
-const X0 = (W - STRIP_W) / 2;
-const X1 = X0 + STRIP_W;
-const STRIP_BOTTOM = 1660;
+export const SAFE = { top: 250, bottom: 1670, side: 40 };
+export const STRIP_HOME = { cx: W / 2, bottom: 1660 }; // default spot: bottom-centre, above the reply bar
+// Strip edges for the current compose() call (set there, read by the drawing helpers).
+let X0 = (W - STRIP_W) / 2, X1 = X0 + STRIP_W, CX = W / 2;
 
 const ROW_H = 92;          // single-line row
 const ROW_H_2 = 124;       // two-line row (long AQI category)
@@ -68,8 +69,10 @@ export async function ensureFonts() {
  * @param {string|null} [opts.scene]  key of SCENES in scenes.js, or null for none
  * @param {{x:number, y:number}} [opts.focus]  which part of the photo the 9:16 crop keeps (0..1, 0.5 = centre)
  * @param {number} [opts.scale]  pixel density: 1 = 1080×1920, 2 = 2160×3840. Layout stays in 1080×1920 units.
+ * @param {{cx:number, bottom:number}} [opts.strip]  where the strip sits (layout units); clamped to SAFE
+ * @returns {{cx:number, bottom:number, left:number, right:number, top:number}} the strip's actual box
  */
-export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 }, scale = 1 }) {
+export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 }, scale = 1, strip = STRIP_HOME }) {
   canvas.width = Math.round(W * scale);
   canvas.height = Math.round(H * scale);
   const ctx = canvas.getContext('2d');
@@ -83,12 +86,18 @@ export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5
   const rowsH = rows.reduce((h, r) => h + (r.lines.length > 1 ? ROW_H_2 : ROW_H), 0);
   //           rule  rows   rule+source  wordmark  scene
   const total = 34 + rowsH + 40 + WORDMARK_GAP + (scene ? ICON_GAP + ICON : 0);
-  const top = STRIP_BOTTOM - total;
+  CX = clamp(strip.cx, SAFE.side + STRIP_W / 2, W - SAFE.side - STRIP_W / 2);
+  X0 = CX - STRIP_W / 2;
+  X1 = CX + STRIP_W / 2;
+  const bottom = clamp(strip.bottom, SAFE.top + total, SAFE.bottom);
+  const top = bottom - total;
 
-  drawScrim(ctx, top);
+  drawScrim(ctx, top, bottom);
   drawStrip(ctx, reading, rows, top, scene);
-  return canvas;
+  return { cx: CX, bottom, left: X0, right: X1, top };
 }
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 /* ── Photo ────────────────────────────────────────────────────────────── */
 
@@ -130,16 +139,17 @@ function drawPlaceholder(ctx, x, y, w, h) {
   ridge(h * 0.8, 40, '#2A3B31', 0.4);
 }
 
-// A light darkening under the strip so it reads on bright photos (snow, sky, beach)
-// without muddying the photo; the text shadow does most of the work.
-function drawScrim(ctx, top) {
-  const from = top - 260;
-  const g = ctx.createLinearGradient(0, from, 0, H);
+// A light band of darkening behind the strip, wherever it sits, so it reads on bright
+// photos (snow, sky, beach) without muddying the rest; the text shadow does most of the work.
+function drawScrim(ctx, top, bottom) {
+  const from = Math.max(0, top - 260), to = Math.min(H, bottom + 220);
+  const g = ctx.createLinearGradient(0, from, 0, to);
   g.addColorStop(0, 'rgba(10,14,12,0)');
-  g.addColorStop(0.45, 'rgba(10,14,12,0.24)');
-  g.addColorStop(1, 'rgba(10,14,12,0.4)');
+  g.addColorStop(0.35, 'rgba(10,14,12,0.26)');
+  g.addColorStop(0.75, 'rgba(10,14,12,0.38)');
+  g.addColorStop(1, `rgba(10,14,12,${to >= H ? 0.38 : 0})`); // near the bottom edge, keep it to the edge
   ctx.fillStyle = g;
-  ctx.fillRect(0, from, W, H - from);
+  ctx.fillRect(0, from, W, to - from);
 }
 
 /* ── Strip ────────────────────────────────────────────────────────────── */
@@ -217,12 +227,12 @@ function drawStrip(ctx, r, rows, top, scene) {
   y += WORDMARK_GAP;
   ctx.font = WORDMARK.font;
   ctx.fillStyle = COLORS.paper;
-  spaced(ctx, 'AERA', W / 2, y, WORDMARK.spacing, 'center');
+  spaced(ctx, 'AERA', CX, y, WORDMARK.spacing, 'center');
 
   // Scene glyph under the wordmark
   if (scene) {
     ctx.strokeStyle = COLORS.paper;
-    drawScene(ctx, scene, W / 2, y + ICON_GAP, ICON);
+    drawScene(ctx, scene, CX, y + ICON_GAP, ICON);
   }
   ctx.restore();
 }

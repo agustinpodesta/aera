@@ -3,7 +3,7 @@
 // never the phone's photo pipeline (HDR+, Night Sight…), so photos looked flat.
 // Photos never leave the device; only rounded coordinates go to /api/air and /api/scene.
 
-import { compose, coverCrop, ensureFonts, W, H } from './compose.js';
+import { compose, coverCrop, ensureFonts, W, H, STRIP_HOME } from './compose.js';
 import { SCENES } from './scenes.js';
 import { photoGps, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } from './location.js';
 import { savePhoto, listPhotos, getPhoto, deletePhoto } from './gallery.js';
@@ -137,7 +137,7 @@ async function openFile(f, { live }) {
   }
   const scale = exportScale(img);
   const shot = {
-    id: newId(), img, src: workingCopy(img, scale), scale, focus: { x: 0.5, y: 0.5 },
+    id: newId(), img, src: workingCopy(img, scale), scale, focus: { x: 0.5, y: 0.5 }, strip: { ...STRIP_HOME },
     takenAt: new Date(live ? Date.now() : f.lastModified || Date.now()),
     live, gps: null, air: null, detected: null, loading: true,
   };
@@ -230,10 +230,11 @@ const effectiveScene = () => (state.scene === 'auto' ? state.shot?.detected ?? n
 // While dragging, draw at 1080×1920 to keep it smooth; everything else at full export size.
 function draw() {
   const shot = state.shot;
-  compose(canvas, {
-    photo: shot.src, focus: shot.focus, scale: dragging ? 1 : shot.scale,
+  shot.stripBox = compose(canvas, {
+    photo: shot.src, focus: shot.focus, strip: shot.strip, scale: dragging ? 1 : shot.scale,
     scene: effectiveScene(), reading: readingFor(shot),
   });
+  shot.strip = { cx: shot.stripBox.cx, bottom: shot.stripBox.bottom }; // keep the clamped spot
 }
 
 function render() {
@@ -278,30 +279,42 @@ function hidePreviewImage() {
   $('previewImg').hidden = true;
 }
 
-/* ── Drag to frame: choose which part of the photo the 9:16 crop keeps ── */
+/* ── Drag: the strip moves where you put it; anywhere else reframes the photo ── */
 
 const stack = $('stack');
+const GRAB = 36; // extra grab margin around the strip, in 1080-wide layout units
 let drag = null, dragging = false, drawQueued = false, hintTimer = 0;
 
 function setupDrag(shot) {
   const { iw, ih, sw, sh } = coverCrop(shot.src);
-  const movable = iw - sw >= 2 || ih - sh >= 2;
-  stack.classList.toggle('draggable', movable);
+  const photoMovable = iw - sw >= 2 || ih - sh >= 2;
+  stack.classList.add('draggable'); // the strip can always move
   const hint = $('dragHint');
+  hint.textContent = photoMovable ? 'Drag the strip or the photo' : 'Drag the strip';
   clearTimeout(hintTimer);
-  hint.hidden = !movable;
+  hint.hidden = false;
   hint.classList.remove('fade');
-  if (movable) hintTimer = setTimeout(() => hint.classList.add('fade'), 2500);
+  hintTimer = setTimeout(() => hint.classList.add('fade'), 3000);
+}
+
+// Pointer position in the 1080×1920 layout space the template draws in.
+function toLayout(e) {
+  const r = stack.getBoundingClientRect();
+  return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
 }
 
 stack.addEventListener('pointerdown', (e) => {
   const shot = state.shot;
-  if (!shot || !stack.classList.contains('draggable')) return;
+  if (!shot) return;
+  const p = toLayout(e), box = shot.stripBox;
+  const onStrip = box && p.x >= box.left - GRAB && p.x <= box.right + GRAB && p.y >= box.top - GRAB && p.y <= box.bottom + GRAB;
   const { iw, ih, sw, sh } = coverCrop(shot.src);
   drag = {
-    id: e.pointerId, x: e.clientX, y: e.clientY, start: { ...shot.focus },
-    slackX: iw - sw, slackY: ih - sh, srcPerCss: sw / stack.clientWidth,
+    id: e.pointerId, x: e.clientX, y: e.clientY, mode: onStrip ? 'strip' : 'photo',
+    focus: { ...shot.focus }, strip: { cx: box?.cx, bottom: box?.bottom },
+    slackX: iw - sw, slackY: ih - sh, srcPerCss: sw / stack.clientWidth, layoutPerCss: W / stack.clientWidth,
   };
+  if (drag.mode === 'photo' && drag.slackX < 2 && drag.slackY < 2) drag = null; // nothing to reframe
 });
 
 stack.addEventListener('pointermove', (e) => {
@@ -312,14 +325,20 @@ stack.addEventListener('pointermove', (e) => {
     dragging = true;
     stack.classList.add('dragging');
     $('dragHint').classList.add('fade');
-    hidePreviewImage(); // show the live canvas while the crop moves
+    hidePreviewImage(); // show the live canvas while things move
     try { stack.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   }
-  // Dragging the photo right reveals more of its left side, so the focus moves left.
-  state.shot.focus = {
-    x: drag.slackX >= 2 ? clamp01(drag.start.x - (dx * drag.srcPerCss) / drag.slackX) : 0.5,
-    y: drag.slackY >= 2 ? clamp01(drag.start.y - (dy * drag.srcPerCss) / drag.slackY) : 0.5,
-  };
+  const shot = state.shot;
+  if (drag.mode === 'strip') {
+    // compose() clamps to Instagram's safe area; the clamped box comes back from draw().
+    shot.strip = { cx: drag.strip.cx + dx * drag.layoutPerCss, bottom: drag.strip.bottom + dy * drag.layoutPerCss };
+  } else {
+    // Dragging the photo right reveals more of its left side, so the focus moves left.
+    shot.focus = {
+      x: drag.slackX >= 2 ? clamp01(drag.focus.x - (dx * drag.srcPerCss) / drag.slackX) : 0.5,
+      y: drag.slackY >= 2 ? clamp01(drag.focus.y - (dy * drag.srcPerCss) / drag.slackY) : 0.5,
+    };
+  }
   if (!drawQueued) {
     drawQueued = true;
     requestAnimationFrame(() => { drawQueued = false; draw(); });
@@ -389,7 +408,7 @@ function toast(text) {
 function renderPlace() {
   const shot = state.shot, el = $('place');
   // An older photo with no GPS of its own falls back to where you are: say so, and invite a change.
-  const guessed = shot.reportAt && shot.gpsSource === 'here';
+  const guessed = Boolean(shot.reportAt) && shot.gpsSource === 'here'; // a real boolean: toggle(x, undefined) flips
   el.classList.toggle('ask', (!shot.gps && !shot.loading) || (guessed && !shot.loading));
   if (shot.loading) { el.textContent = 'Reading the air…'; return; }
   if (!shot.gps) { el.textContent = 'Add where this was taken'; return; }
