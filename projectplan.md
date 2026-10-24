@@ -71,8 +71,9 @@
 - [x] Strip opacity 75%
 - [x] Old photos (per Agustín): place from the photo's GPS → the air there *now* + automatic sticker; the strip's TIME becomes now so the report never claims the photo's date. No GPS in the file → your current location, flagged "No location in photo · set it"
 - [x] "No reading" on gallery photos fixed: Android's picker zeroes GPS fields (reads as NaN), which Aera sent as lat=NaN → 400 (seen in Vercel logs). Now only real coordinates count; otherwise current location + "No location in photo · set it". Air lookup retries once before "no reading"
-- [x] Root cause of "no location" on picked photos: Chrome on Android gets a GPS-blanked copy from the system photo picker (no media-location permission; Chromium WontFix 428397711). On Android, Aera now opens the system Files picker (`showOpenFilePicker`), which serves the original file; still-blanked files say "Android hid the location · set it"
-- [ ] **Verify on the Pixel** that the Files picker keeps GPS (preview shows "Photo location"), from Recent and from DCIM › Camera
+- [x] Root cause of "no location" on picked photos: Android blanks GPS for Chrome (no media-location permission; Chromium WontFix 428397711). Tried the Files picker — verified on the Pixel that it is blanked there too, and it showed non-image files, so reverted to the images-only gallery picker
+- [x] Older photos without a readable location open "Where was this taken?" straight away; last 5 picked places offered as "Recent" (one tap); just-taken photos keep the current location
+- [ ] Real auto-location for old Android photos needs an installed app: try a PWA Share Target ("Share → Aera" from Google Photos, M4, unverified whether GPS survives) or a native Android wrapper with ACCESS_MEDIA_LOCATION
 - [x] Pinch to resize the strip (0.5×–1.77×, grows around its centre, follows the fingers), like an Instagram sticker; edge limits loosened 80% per Agustín (50 px top/bottom, 8 px sides)
 - [x] Movable strip: drag it anywhere in the preview (photo reframes when dragging elsewhere); clamped to IG's safe area (y 250–1670, 40 px sides); the darkening band follows the strip. (Strava's IG sticker is movable via the native Share-to-Stories sticker layer, which web apps can't use.)
 

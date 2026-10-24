@@ -69,26 +69,11 @@ function openCamera() {
   $('capture').click();
 }
 
-// Chrome on Android hands web pages a copy of picked photos with the GPS blanked (the
-// system photo picker redacts location for apps without media-location access, and
-// Chromium won't change that). The system Files picker serves the original file, so
-// on Android we open that when the browser supports it.
-const FILES_PICKER = IS_ANDROID && typeof window.showOpenFilePicker === 'function';
-
-async function pickPhoto() {
+// The phone's gallery picker (images only). Note: Chrome on Android receives picked photos
+// with GPS blanked (Android redacts location for apps without media-location access, via
+// the gallery and the Files picker alike), so older photos usually need their place set.
+function pickPhoto() {
   notify('');
-  if (FILES_PICKER) {
-    try {
-      const [handle] = await window.showOpenFilePicker({
-        multiple: false,
-        types: [{ description: 'Photos', accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'] } }],
-      });
-      return importFile(await handle.getFile());
-    } catch (err) {
-      if (err?.name === 'AbortError') return; // closed the picker
-      // Anything else (blocked, unsupported here): fall back to the regular picker.
-    }
-  }
   $('file').value = '';
   $('file').click();
 }
@@ -142,6 +127,9 @@ async function importFile(f) {
   if (gps) return loadPlace(shot, gps, {}, 'photo');
   const here = await locateHere();
   loadPlace(shot, here.gps, here, here.gps ? 'here' : null);
+  // An older photo with no readable location: where you are now is probably not where it
+  // was taken, so ask straight away (recent places are one tap). Just-taken photos skip this.
+  if (shot.reportAt && state.shot === shot && state.screen === 'preview') openSheet();
 }
 
 // The load event, not img.decode(): decode() can wait for a painted frame, which never
@@ -618,17 +606,31 @@ let searchTimer = 0;
 function openSheet() {
   $('sheet').hidden = false;
   $('placeQuery').value = '';
-  renderResults([]);
+  renderResults([], { showRecent: true });
   setTimeout(() => $('placeQuery').focus(), 50);
+}
+
+// The last few places picked by search, kept on this device for one-tap reuse.
+const RECENT_PLACES_KEY = 'aera.places';
+
+function recentPlaces() {
+  try { return JSON.parse(localStorage.getItem(RECENT_PLACES_KEY)) ?? []; } catch { return []; }
+}
+
+function rememberPlace({ name, detail, lat, lon }) {
+  const clean = (d) => String(d ?? '').replace(/^Recent( · )?/, '');
+  const list = [{ name, detail: clean(detail), lat, lon }, ...recentPlaces().filter((p) => p.name !== name || p.lat !== lat)];
+  try { localStorage.setItem(RECENT_PLACES_KEY, JSON.stringify(list.slice(0, 5))); } catch { /* storage blocked */ }
 }
 
 function closeSheet() {
   $('sheet').hidden = true;
 }
 
-function renderResults(places) {
+function renderResults(places, { showRecent = false } = {}) {
   const items = [];
   if (navigator.geolocation) items.push({ name: 'Use my current location', detail: '', here: true });
+  if (showRecent) items.push(...recentPlaces().map((p) => ({ ...p, detail: p.detail ? `Recent · ${p.detail}` : 'Recent' })));
   items.push(...places);
   $('placeResults').replaceChildren(...items.map((p) => {
     const li = document.createElement('li');
@@ -647,6 +649,7 @@ async function choosePlace(p) {
   closeSheet();
   const shot = state.shot;
   if (!p.here) {
+    rememberPlace(p);
     shot.placeName = p.name;
     loadPlace(shot, { lat: p.lat, lon: p.lon }, {}, 'search');
     return;
@@ -669,7 +672,7 @@ $('placeQuery').addEventListener('input', (e) => {
   const q = e.target.value;
   searchTimer = setTimeout(async () => {
     const places = await searchPlaces(q);
-    if ($('placeQuery').value === q) renderResults(places);
+    if ($('placeQuery').value === q) renderResults(places, { showRecent: !q.trim() });
   }, 250);
 });
 $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) closeSheet(); });
