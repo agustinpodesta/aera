@@ -62,7 +62,13 @@
 - [x] Sharper export: up to 2160×3840 (8 MP) when the photo has the detail (12 MP phone photos do); drag redraws at 1080 for smoothness; ~2.2 MB JPEG
 - [x] Lighter gradient behind the strip (max 40% instead of 60%), so the photo isn't muddied
 - [ ] Ultra HDR: Pixel/Android photos carry an HDR gain map that canvas drops (export is SDR, looks flatter in Google Photos on HDR screens). Option: re-attach a cropped gain map via libultrahdr (WASM) — bigger project
-- [ ] Scene detector: Hwahongmun, Suwon (37.287, 127.018) reads as Mountains — should be City; recalibrate (city places + relief rule)
+- [x] Diagnosis 2: camera hand-off on Pixel returns a weaker photo (−25% edge detail, −13% contrast, motion blur, no Ultra HDR) — Aera's own pipeline on the Pixel's saved photo stays sharp
+- [x] Home keeps the quick camera shutter + a visible "Use a photo you just took · Best quality" option; photos taken < 1 h ago count as "now" (current air; current location when the picker strips GPS)
+- [x] Robustness: image loading uses the load event (img.decode() could hang while the page is in the background)
+- [x] Scene detector recalibrated: near a city centre (≤ 5 km) 15 POIs = city; forest needs < 10 POIs; inside a city, mountains need ≥ 600 m relief. 18/19 test places (Suwon ×3 now city; Bukchon still ambiguous)
+- [x] Sticker is automatic: chips hidden behind "Sticker: City · change"
+- [x] API caching: long on Vercel's CDN (cleared each deploy), browsers always revalidate (no stale scenes after fixes)
+- [x] Strip opacity 75%
 
 ## Gallery (added 23 Oct, PXLCAM-style)
 - [x] On-device gallery (`src/gallery.js`, IndexedDB): every finished photo auto-saved (captured or imported); scene changes update the same entry

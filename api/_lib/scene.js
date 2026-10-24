@@ -17,6 +17,7 @@ const EARTH = 40075016.686; // metres around the equator
 const NEAR = 250;           // radius for buildings / POIs
 const CITY_Z = 10;          // zoom whose place layer carries city labels
 const CITY_KM = 12;         // a city label this close means "in a city"
+const CITY_CORE_KM = 5;     // …and this close, near its centre
 const PEAK_Z = 12;          // zoom used to find named peaks
 const PEAK_KM = 6;          // peaks this close count towards relief
 const COAST = 600;          // radius we look for sea and beaches
@@ -206,18 +207,20 @@ async function highestPeak(lat, lon) {
 
 const SETTLED = ['residential', 'suburb', 'neighbourhood', 'quarter', 'commercial', 'retail'];
 
-// Order matters: a beach beats everything; a downtown beats nearby hills; standing
-// in woods beats moderate hills. Busy tourist villages (many POIs, no city nearby)
-// fall through to mountains/neighborhood rather than city.
+// Order matters: a beach beats everything; a city beats nearby hills and street
+// trees; standing in real woods beats moderate hills. Busy tourist villages (many
+// POIs, no city nearby) fall through to mountains/neighborhood rather than city.
 export function classifyScene(s) {
   const inCity = s.cityKm != null && s.cityKm <= CITY_KM;
-  const downtown = s.tall >= 5 || (inCity && s.pois >= 40);
+  const cityCore = s.cityKm != null && s.cityKm <= CITY_CORE_KM; // historic centres are low-rise, POI-light
+  const downtown = s.tall >= 5 || (inCity && s.pois >= 40) || (cityCore && s.pois >= 15);
   const alpine = s.inIceOrRock || s.relief >= 900;
 
   if (s.beachM <= 400 || (s.oceanM <= 350 && !downtown)) return 'coast';
   if (downtown) return 'city';
-  if (s.inWood && !alpine) return 'forest';
-  if (alpine || s.relief >= 400 || (s.elevation >= 1500 && s.relief >= 200)) return 'mountains';
+  if (s.inWood && !alpine && s.pois < 10) return 'forest';
+  // Many cities sit among hills (Seoul, Suwon): inside one, only big relief counts.
+  if (alpine || s.relief >= (inCity ? 600 : 400) || (s.elevation >= 1500 && s.relief >= 200)) return 'mountains';
   if (s.pois >= 10 || SETTLED.includes(s.landuse)) return 'neighborhood';
   return 'countryside';
 }

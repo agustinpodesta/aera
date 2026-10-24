@@ -28,7 +28,9 @@ async function api(req, res, url) {
   if (!/^[a-z0-9-]+$/.test(name)) return send(res, 404, 'Not found');
   let handler;
   try {
-    handler = (await import(pathToFileURL(join(ROOT, 'api', `${name}.js`)).href)).default;
+    // Cache-bust so edits to api/ apply without restarting (shared _lib modules still cache).
+    const file = join(ROOT, 'api', `${name}.js`);
+    handler = (await import(`${pathToFileURL(file).href}?v=${(await stat(file)).mtimeMs}`)).default;
   } catch {
     return send(res, 404, 'Not found');
   }

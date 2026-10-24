@@ -214,3 +214,20 @@ body {
   background: rgba(14, 15, 13, .6); transition: opacity .4s ease;
 }
 .drag-hint.fade { opacity: 0; }
+
+/* ── Best-quality option on home ── */
+.home-alt { width: 100%; max-width: 420px; margin: 0 auto; padding: 0 24px 8px; }
+.btn.recent { width: 100%; min-height: 60px; flex-direction: column; gap: 2px; padding: 8px 18px; border-color: var(--paper-mute); }
+.btn.recent small { font: 400 11px var(--mono); letter-spacing: .04em; color: var(--paper-mute); }
+
+/* ── Info row: reading source + automatic sticker ── */
+.info-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.info-row .place { flex: 1; min-width: 0; }
+.scene-toggle {
+  flex: none; min-height: 32px; padding: 0 2px;
+  font: 400 12px var(--mono); letter-spacing: .03em; color: var(--paper-mute);
+  background: none; border: 0; cursor: pointer;
+}
+.scene-toggle::after { content: " · change"; text-decoration: underline; text-underline-offset: 3px; }
+.scene-toggle[aria-expanded="true"]::after { content: " · done"; }
+.scene-toggle:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }

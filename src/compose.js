@@ -36,7 +36,7 @@ const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
 const WORDMARK = { font: `800 44px "Syne", sans-serif`, spacing: 3.8 };
 const WORDMARK_GAP = 78;   // footer baseline → wordmark baseline
 const ICON_GAP = 22;       // wordmark baseline → scene glyph top
-const OVERLAY_ALPHA = 0.6; // the whole strip sits into the photo
+const OVERLAY_ALPHA = 0.75; // the whole strip sits into the photo
 
 const STRIP_W = 600;
 const X0 = (W - STRIP_W) / 2;

@@ -17,7 +17,10 @@ export default async function handler(req, res) {
 
   try {
     const { scene, signals } = await detectScene(+lat.toFixed(3), +lon.toFixed(3));
-    res.setHeader('Cache-Control', 'public, s-maxage=2592000, stale-while-revalidate=86400');
+    // Long-lived on Vercel's CDN (cleared on every deploy); browsers always revalidate,
+    // so detector fixes reach people immediately.
+    res.setHeader('Vercel-CDN-Cache-Control', 'max-age=2592000, stale-while-revalidate=86400');
+    res.setHeader('Cache-Control', 'max-age=0, must-revalidate');
     return res.status(200).json({ scene, signals });
   } catch (err) {
     console.error('scene', err);

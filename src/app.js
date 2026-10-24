@@ -10,6 +10,7 @@ import { savePhoto, listPhotos, getPhoto, deletePhoto } from './gallery.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
+const RECENT_MS = 60 * 60e3; // a photo taken within this counts as "now" (current air, current place)
 
 // Websites can't write to the Photos library directly. On iOS the only route is the
 // share sheet's "Save Image"; on Android a download lands in the phone's gallery.
@@ -100,7 +101,9 @@ async function onCapture(e) {
   loadPlace(shot, await photoGps(f)); // location off: fall back to the photo's own GPS, if any
 }
 
-// A photo from the camera roll: its own GPS, and the air at the hour it was taken.
+// A photo from the camera roll. Just taken (the best-quality route: the camera app's own
+// file) → treat as now: current air, and your current place if the picker stripped GPS.
+// Older → its own GPS, and the air at the hour it was taken.
 async function onFile(e) {
   const f = e.target.files?.[0];
   if (!f) return;
@@ -108,14 +111,25 @@ async function onFile(e) {
   if (!shot) return;
   const [gps, taken] = await Promise.all([photoGps(f), photoTakenAt(f)]);
   if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
+  if (Date.now() - shot.takenAt.getTime() <= RECENT_MS) {
+    shot.live = true;
+    const here = await locateHere();
+    if (gps) return loadPlace(shot, gps);
+    return loadPlace(shot, here.gps, here);
+  }
   loadPlace(shot, gps);
 }
 
 async function openFile(f, { live }) {
   const img = new Image();
-  img.src = URL.createObjectURL(f);
   try {
-    await img.decode();
+    // The load event, not img.decode(): decode() can wait for a painted frame, which never
+    // comes while the page is in the background (e.g. returning from the camera app).
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = URL.createObjectURL(f);
+    });
   } catch {
     show('home');
     notify('That photo couldn’t be opened. Try a JPEG or PNG.');
@@ -197,6 +211,7 @@ function readingFor(shot) {
 function openPreview(shot) {
   state.shot = shot;
   state.scene = 'auto';
+  setScenePicker(false);
   // Imported from the gallery: replace that entry, so back from the preview goes home.
   if (history.state?.aera === 'gallery') history.replaceState({ aera: 'preview' }, '');
   else if (history.state?.aera !== 'preview') history.pushState({ aera: 'preview' }, '');
@@ -381,8 +396,12 @@ function renderPlace() {
   el.textContent = `${where} · ${what}`;
 }
 
+// The sticker is automatic; the chips stay tucked away behind "change".
 function renderScenes() {
   const shot = state.shot;
+  const current = effectiveScene();
+  $('sceneToggle').textContent = shot?.loading && state.scene === 'auto' ? 'Sticker: …'
+    : current ? `Sticker: ${SCENES[current].label}` : 'No sticker';
   const auto = shot?.loading ? 'Auto · …' : shot?.detected ? `Auto · ${SCENES[shot.detected].label}` : 'Auto · none';
   const options = [['auto', auto], ...Object.entries(SCENES).map(([id, s]) => [id, s.label]), [null, 'None']];
   $('scenes').replaceChildren(...options.map(([value, label]) => {
@@ -391,9 +410,14 @@ function renderScenes() {
     b.className = 'chip' + (on ? ' on' : '');
     b.setAttribute('aria-pressed', String(on));
     b.textContent = label;
-    b.onclick = () => { state.scene = value; renderScenes(); render(); };
+    b.onclick = () => { state.scene = value; setScenePicker(false); renderScenes(); render(); };
     return b;
   }));
+}
+
+function setScenePicker(open) {
+  $('scenes').hidden = !open;
+  $('sceneToggle').setAttribute('aria-expanded', String(open));
 }
 
 /* ── Place sheet (manual location) ────────────────────────────────────── */
@@ -541,6 +565,7 @@ for (const id of ['download', 'viewerSave']) $(id).setAttribute('aria-label', IS
 $('viewerDelete').addEventListener('click', removeViewed);
 document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => history.back()));
 $('place').addEventListener('click', openSheet);
+$('sceneToggle').addEventListener('click', () => setScenePicker($('scenes').hidden));
 $('sheetClose').addEventListener('click', closeSheet);
 $('capture').addEventListener('change', onCapture);
 $('file').addEventListener('change', onFile);

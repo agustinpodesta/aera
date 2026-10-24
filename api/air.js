@@ -18,9 +18,11 @@ export default async function handler(req, res) {
 
   try {
     const air = await getAir(+lat.toFixed(2), +lon.toFixed(2), at);
-    res.setHeader('Cache-Control', isPast(at)
-      ? 'public, s-maxage=2592000'
-      : 'public, s-maxage=600, stale-while-revalidate=1200');
+    // Cached on Vercel's CDN only; browsers always ask again (readings change hourly).
+    res.setHeader('Vercel-CDN-Cache-Control', isPast(at)
+      ? 'max-age=2592000'
+      : 'max-age=600, stale-while-revalidate=1200');
+    res.setHeader('Cache-Control', 'max-age=0, must-revalidate');
     return res.status(200).json(air);
   } catch (err) {
     console.error('air', err);
