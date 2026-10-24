@@ -7,6 +7,7 @@ import { compose, coverCrop, ensureFonts, W, H, STRIP_HOME } from './compose.js'
 import { SCENES } from './scenes.js';
 import { photoGps, photoLocation, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } from './location.js';
 import { savePhoto, listPhotos, getPhoto, getEditable, deletePhoto } from './gallery.js';
+import { recordPlace, placeAt } from './trail.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
@@ -81,7 +82,7 @@ function pickPhoto() {
 // Locate and prefetch air + scene, so the preview is ready when the photo arrives.
 // Reuses a fresh fix; retries when the last attempt failed or went stale.
 function locateHere(force = false) {
-  const fresh = () => locateMe().then((gps) => ({
+  const fresh = () => locateMe().then((gps) => (gps && recordPlace(gps), {
     gps,
     at: Date.now(),
     air: gps ? fetchAir(gps) : null,
@@ -110,8 +111,10 @@ async function onCapture(e) {
 // A photo from the camera roll: the place comes from its own GPS, the air is the air
 // there *now* (no reliable historical source). For an old photo the strip's TIME
 // becomes now too, so the report never claims to be from the day the photo was taken.
-// No GPS in the file (location was off, or the picker stripped it) → your current
-// place, flagged in the preview so you can change it.
+// Android hides the GPS of picked photos from every website, so without it: a photo
+// taken just now → where you are; an older one → where Aera saw you around that time
+// (the on-device trail); else where you are. Never a question: the place line under
+// the photo is one tap away when the guess is wrong.
 function onFile(e) {
   const f = e.target.files?.[0];
   if (f) importFile(f);
@@ -120,16 +123,20 @@ function onFile(e) {
 async function importFile(f) {
   const shot = await openFile(f, { live: true });
   if (!shot) return;
-  const [{ gps, hidden }, taken] = await Promise.all([photoLocation(f), photoTakenAt(f)]);
-  shot.gpsHidden = hidden;
+  const [{ gps }, taken] = await Promise.all([photoLocation(f), photoTakenAt(f)]);
   if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
   if (Date.now() - shot.takenAt.getTime() > RECENT_MS) shot.reportAt = new Date();
-  if (gps) return loadPlace(shot, gps, {}, 'photo');
+  if (gps) {
+    recordPlace(gps, shot.takenAt);
+    return loadPlace(shot, gps, {}, 'photo');
+  }
+  const seen = shot.reportAt ? placeAt(shot.takenAt) : null;
+  if (seen) {
+    shot.placeName = seen.name ?? undefined;
+    return loadPlace(shot, seen.gps, {}, 'trail');
+  }
   const here = await locateHere();
   loadPlace(shot, here.gps, here, here.gps ? 'here' : null);
-  // An older photo with no readable location: where you are now is probably not where it
-  // was taken, so ask straight away (recent places are one tap). Just-taken photos skip this.
-  if (shot.reportAt && state.shot === shot && state.screen === 'preview') openSheet();
 }
 
 // The load event, not img.decode(): decode() can wait for a painted frame, which never
@@ -228,7 +235,7 @@ function drawTo(src, w, h) {
 // Live shots use the air now; imported photos use the hour they were taken.
 async function loadPlace(shot, gps, pre = {}, source = null) {
   shot.gps = gps;
-  shot.gpsSource = gps ? source : null; // 'photo' | 'here' | 'search'
+  shot.gpsSource = gps ? source : null; // 'photo' | 'here' | 'trail' | 'search' | 'chosen-here'
   shot.air = null;
   shot.detected = null;
   shot.loading = !!gps;
@@ -542,21 +549,18 @@ function toast(text) {
 // One line under the photo: what the reading is, and a way to change the place.
 function renderPlace() {
   const shot = state.shot, el = $('place');
-  // An older photo with no GPS of its own falls back to where you are: say so, and invite a change.
-  const guessed = Boolean(shot.reportAt) && shot.gpsSource === 'here'; // a real boolean: toggle(x, undefined) flips
-  el.classList.toggle('ask', (!shot.gps && !shot.loading) || (guessed && !shot.loading));
+  // An older photo placed by a guess (where you are now, or the trail): keep it quiet,
+  // but make the change one tap. A real boolean: toggle(x, undefined) flips the class.
+  const guessed = Boolean(shot.reportAt) && (shot.gpsSource === 'here' || shot.gpsSource === 'trail');
+  el.classList.toggle('ask', !shot.gps && !shot.loading);
   if (shot.loading) { el.textContent = 'Reading the air…'; return; }
   if (!shot.gps) { el.textContent = 'Add where this was taken'; return; }
-  if (guessed && !shot.placeName) {
-    el.textContent = shot.gpsHidden ? 'Android hid the location · set it' : 'No location in photo · set it';
-    return;
-  }
   const air = shot.air;
   const where = shot.placeName ?? air?.place ?? (shot.gpsSource === 'photo' ? 'Photo location' : 'Here');
   const what = !air ? 'air data unavailable'
     : air.aqi == null ? 'no reading here right now'
     : air.scope === 'modeled' ? `${air.source}, modeled` : air.source;
-  el.textContent = `${where} · ${what}`;
+  el.textContent = guessed ? `${where} · ${what} · change` : `${where} · ${what}`;
 }
 
 // The sticker is automatic; the chips stay tucked away behind "change".
@@ -650,6 +654,7 @@ async function choosePlace(p) {
   const shot = state.shot;
   if (!p.here) {
     rememberPlace(p);
+    recordPlace(p, shot.takenAt, p.name); // other photos from that trip land here too
     shot.placeName = p.name;
     loadPlace(shot, { lat: p.lat, lon: p.lon }, {}, 'search');
     return;
@@ -664,6 +669,7 @@ async function choosePlace(p) {
     $('place').textContent = 'Location is off. Search a city instead.';
     return;
   }
+  recordPlace(here.gps, shot.takenAt); // you were here when it was taken
   loadPlace(shot, here.gps, here, 'chosen-here');
 }
 
