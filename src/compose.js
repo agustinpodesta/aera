@@ -14,8 +14,8 @@
 // Fallback (Open-Meteo) readings say "(MODELED)" after the source so a model
 // estimate never passes for a measurement.
 //
-// The strip can be dragged anywhere, but is clamped to Instagram's Story safe area:
-// IG covers roughly the top and bottom 250px (Meta: ~14%), so it stays between them.
+// The strip can be dragged and pinch-resized anywhere, kept within a small margin of
+// the edges (Agustín's call: 80% looser than Instagram's ~250px Story safe zones).
 
 import { aqiCategory, aqiDotColor } from './aqi.js';
 import { drawScene } from './scenes.js';
@@ -39,7 +39,8 @@ const ICON_GAP = 22;       // wordmark baseline → scene glyph top
 const OVERLAY_ALPHA = 0.75; // the whole strip sits into the photo
 
 const STRIP_W = 600;
-export const SAFE = { top: 250, bottom: 1670, side: 40 };
+export const SAFE = { top: 50, bottom: H - 50, side: 8 };
+export const STRIP_SCALE = { min: 0.5, max: (W - 2 * 8) / 600 }; // up to edge-to-edge
 export const STRIP_HOME = { cx: W / 2, bottom: 1660 }; // default spot: bottom-centre, above the reply bar
 // Strip edges for the current compose() call (set there, read by the drawing helpers).
 let X0 = (W - STRIP_W) / 2, X1 = X0 + STRIP_W, CX = W / 2;
@@ -69,8 +70,9 @@ export async function ensureFonts() {
  * @param {string|null} [opts.scene]  key of SCENES in scenes.js, or null for none
  * @param {{x:number, y:number}} [opts.focus]  which part of the photo the 9:16 crop keeps (0..1, 0.5 = centre)
  * @param {number} [opts.scale]  pixel density: 1 = 1080×1920, 2 = 2160×3840. Layout stays in 1080×1920 units.
- * @param {{cx:number, bottom:number}} [opts.strip]  where the strip sits (layout units); clamped to SAFE
- * @returns {{cx:number, bottom:number, left:number, right:number, top:number}} the strip's actual box
+ * @param {{cx:number, bottom:number, scale?:number}} [opts.strip]  where the strip sits and how big
+ *   (layout units; scale 1 = 600 wide); clamped to SAFE
+ * @returns {{cx:number, bottom:number, scale:number, left:number, right:number, top:number}} the strip's actual box
  */
 export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 }, scale = 1, strip = STRIP_HOME }) {
   canvas.width = Math.round(W * scale);
@@ -86,15 +88,23 @@ export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5
   const rowsH = rows.reduce((h, r) => h + (r.lines.length > 1 ? ROW_H_2 : ROW_H), 0);
   //           rule  rows   rule+source  wordmark  scene
   const total = 34 + rowsH + 40 + WORDMARK_GAP + (scene ? ICON_GAP + ICON : 0);
-  CX = clamp(strip.cx, SAFE.side + STRIP_W / 2, W - SAFE.side - STRIP_W / 2);
-  X0 = CX - STRIP_W / 2;
-  X1 = CX + STRIP_W / 2;
-  const bottom = clamp(strip.bottom, SAFE.top + total, SAFE.bottom);
-  const top = bottom - total;
+  const k = clamp(strip.scale ?? 1, STRIP_SCALE.min, Math.min(STRIP_SCALE.max, (SAFE.bottom - SAFE.top) / total));
+  const w = STRIP_W * k, h = total * k;
+  const cx = clamp(strip.cx, SAFE.side + w / 2, W - SAFE.side - w / 2);
+  const bottom = clamp(strip.bottom, SAFE.top + h, SAFE.bottom);
 
-  drawScrim(ctx, top, bottom);
-  drawStrip(ctx, reading, rows, top, scene);
-  return { cx: CX, bottom, left: X0, right: X1, top };
+  drawScrim(ctx, bottom - h, bottom);
+  // Lay the strip out at size 1 around its bottom-centre anchor, then scale it there.
+  CX = cx;
+  X0 = cx - STRIP_W / 2;
+  X1 = cx + STRIP_W / 2;
+  ctx.save();
+  ctx.translate(cx, bottom);
+  ctx.scale(k, k);
+  ctx.translate(-cx, -bottom);
+  drawStrip(ctx, reading, rows, bottom - total, scene);
+  ctx.restore();
+  return { cx, bottom, scale: k, left: cx - w / 2, right: cx + w / 2, top: bottom - h };
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));

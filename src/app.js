@@ -189,10 +189,12 @@ async function loadPlace(shot, gps, pre = {}, source = null) {
   refresh(shot);
   if (!gps) return; // no location: the preview asks for one
   const at = shot.live ? null : shot.takenAt;
-  const [air, scene] = await Promise.all([
+  let [air, scene] = await Promise.all([
     pre.air ?? fetchAir(gps, at),
     pre.scene ?? fetchScene(gps).then((b) => b.scene ?? null),
   ]);
+  // One retry before showing "no reading": the air services occasionally rate-limit or time out.
+  if (!air && shot.gps === gps) air = await new Promise((r) => setTimeout(r, 800)).then(() => fetchAir(gps, at));
   if (shot.gps !== gps) return; // a different place was picked meanwhile
   Object.assign(shot, { air, detected: scene, loading: false });
   refresh(shot);
@@ -234,7 +236,7 @@ function draw() {
     photo: shot.src, focus: shot.focus, strip: shot.strip, scale: dragging ? 1 : shot.scale,
     scene: effectiveScene(), reading: readingFor(shot),
   });
-  shot.strip = { cx: shot.stripBox.cx, bottom: shot.stripBox.bottom }; // keep the clamped spot
+  shot.strip = { cx: shot.stripBox.cx, bottom: shot.stripBox.bottom, scale: shot.stripBox.scale }; // keep the clamped spot
 }
 
 function render() {
@@ -290,7 +292,7 @@ function setupDrag(shot) {
   const photoMovable = iw - sw >= 2 || ih - sh >= 2;
   stack.classList.add('draggable'); // the strip can always move
   const hint = $('dragHint');
-  hint.textContent = photoMovable ? 'Drag the strip or the photo' : 'Drag the strip';
+  hint.textContent = photoMovable ? 'Drag or pinch the strip · drag the photo' : 'Drag or pinch the strip';
   clearTimeout(hintTimer);
   hint.hidden = false;
   hint.classList.remove('fade');
@@ -303,35 +305,89 @@ function toLayout(e) {
   return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
 }
 
+const pointers = new Map(); // live touches on the preview: id → {x, y}
+
+function onStripAt(p) {
+  const box = state.shot?.stripBox;
+  return !!box && p.x >= box.left - GRAB && p.x <= box.right + GRAB && p.y >= box.top - GRAB && p.y <= box.bottom + GRAB;
+}
+
+function beginDragging(e) {
+  dragging = true;
+  stack.classList.add('dragging');
+  $('dragHint').classList.add('fade');
+  hidePreviewImage(); // show the live canvas while things move
+  try { stack.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+}
+
+function queueDraw() {
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(() => { drawQueued = false; draw(); });
+}
+
 stack.addEventListener('pointerdown', (e) => {
   const shot = state.shot;
   if (!shot) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  // Second finger on the strip: pinch to resize (and move), like an Instagram sticker.
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    if (drag?.mode === 'strip' || onStripAt(toLayout({ clientX: mid.x, clientY: mid.y }))) {
+      const box = shot.stripBox;
+      drag = {
+        mode: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), mid, layoutPerCss: W / stack.clientWidth,
+        scale: box.scale, cx: box.cx, cy: (box.top + box.bottom) / 2, unitH: (box.bottom - box.top) / box.scale,
+      };
+      if (!dragging) beginDragging(e);
+    }
+    return;
+  }
+  if (pointers.size > 2) return;
+
   const p = toLayout(e), box = shot.stripBox;
-  const onStrip = box && p.x >= box.left - GRAB && p.x <= box.right + GRAB && p.y >= box.top - GRAB && p.y <= box.bottom + GRAB;
   const { iw, ih, sw, sh } = coverCrop(shot.src);
   drag = {
-    id: e.pointerId, x: e.clientX, y: e.clientY, mode: onStrip ? 'strip' : 'photo',
-    focus: { ...shot.focus }, strip: { cx: box?.cx, bottom: box?.bottom },
+    id: e.pointerId, x: e.clientX, y: e.clientY, mode: onStripAt(p) ? 'strip' : 'photo',
+    focus: { ...shot.focus }, strip: { cx: box?.cx, bottom: box?.bottom, scale: box?.scale ?? 1 },
     slackX: iw - sw, slackY: ih - sh, srcPerCss: sw / stack.clientWidth, layoutPerCss: W / stack.clientWidth,
   };
   if (drag.mode === 'photo' && drag.slackX < 2 && drag.slackY < 2) drag = null; // nothing to reframe
 });
 
 stack.addEventListener('pointermove', (e) => {
-  if (!drag || e.pointerId !== drag.id) return;
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!drag) return;
+  const shot = state.shot;
+
+  if (drag.mode === 'pinch') {
+    if (pointers.size < 2) return;
+    const [a, b] = [...pointers.values()];
+    const scale = drag.scale * (Math.hypot(a.x - b.x, a.y - b.y) / drag.dist);
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    // Grow around the strip's centre and follow the fingers' midpoint.
+    const cy = drag.cy + (mid.y - drag.mid.y) * drag.layoutPerCss;
+    shot.strip = {
+      cx: drag.cx + (mid.x - drag.mid.x) * drag.layoutPerCss,
+      bottom: cy + (drag.unitH * scale) / 2,
+      scale,
+    };
+    queueDraw();
+    return;
+  }
+
+  if (e.pointerId !== drag.id) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!dragging) {
     if (Math.hypot(dx, dy) < 6) return; // a tap or long-press (save), not a drag
-    dragging = true;
-    stack.classList.add('dragging');
-    $('dragHint').classList.add('fade');
-    hidePreviewImage(); // show the live canvas while things move
-    try { stack.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+    beginDragging(e);
   }
-  const shot = state.shot;
   if (drag.mode === 'strip') {
-    // compose() clamps to Instagram's safe area; the clamped box comes back from draw().
-    shot.strip = { cx: drag.strip.cx + dx * drag.layoutPerCss, bottom: drag.strip.bottom + dy * drag.layoutPerCss };
+    // compose() clamps to the edges; the clamped box comes back from draw().
+    shot.strip = { ...drag.strip, cx: drag.strip.cx + dx * drag.layoutPerCss, bottom: drag.strip.bottom + dy * drag.layoutPerCss };
   } else {
     // Dragging the photo right reveals more of its left side, so the focus moves left.
     shot.focus = {
@@ -339,15 +395,15 @@ stack.addEventListener('pointermove', (e) => {
       y: drag.slackY >= 2 ? clamp01(drag.focus.y - (dy * drag.srcPerCss) / drag.slackY) : 0.5,
     };
   }
-  if (!drawQueued) {
-    drawQueued = true;
-    requestAnimationFrame(() => { drawQueued = false; draw(); });
-  }
+  queueDraw();
 });
 
 function endDrag(e) {
-  if (!drag || e.pointerId !== drag.id) return;
-  drag = null;
+  pointers.delete(e.pointerId);
+  if (!drag) return;
+  const pinchOver = drag.mode === 'pinch' && pointers.size < 2;
+  if (!pinchOver && e.pointerId !== drag.id) return;
+  drag = null; // after a pinch, the finger left behind does nothing until lifted
   if (!dragging) return;
   dragging = false;
   stack.classList.remove('dragging');

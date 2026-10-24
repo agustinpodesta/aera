@@ -3,14 +3,27 @@
 
 import * as exifr from 'https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.esm.mjs';
 
-/** @returns {Promise<{lat:number, lon:number}|null>} */
+/**
+ * The photo's own location, or null. Android's photo picker can hide location by zeroing
+ * the GPS fields rather than removing them; that reads as NaN or 0,0, so only real
+ * coordinates count.
+ * @returns {Promise<{lat:number, lon:number}|null>}
+ */
 export async function photoGps(src) {
   try {
     const gps = await exifr.gps(src);
-    return gps?.latitude != null ? { lat: gps.latitude, lon: gps.longitude } : null;
+    return validCoords(gps?.latitude, gps?.longitude);
   } catch {
     return null;
   }
+}
+
+export function validCoords(lat, lon) {
+  lat = Number(lat);
+  lon = Number(lon);
+  const ok = Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 85 && Math.abs(lon) <= 180
+    && !(Math.abs(lat) < 1e-6 && Math.abs(lon) < 1e-6);
+  return ok ? { lat, lon } : null;
 }
 
 /**
@@ -32,6 +45,7 @@ export async function photoTakenAt(src) {
 
 /** @returns {Promise<{scene:string|null, signals?:object}>} */
 export async function fetchScene({ lat, lon }) {
+  if (!validCoords(lat, lon)) return { scene: null };
   try {
     const res = await fetch(`api/scene?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}`);
     return await res.json();
@@ -57,6 +71,7 @@ export function locateMe() {
  * @returns {Promise<{aqi:number|null, pm25?:number|null, source:string, scope:string, updatedAt:string|null, historical?:boolean}|null>}
  */
 export async function fetchAir({ lat, lon }, at = null) {
+  if (!validCoords(lat, lon)) return null;
   try {
     const q = `lat=${lat.toFixed(2)}&lon=${lon.toFixed(2)}${at ? `&at=${encodeURIComponent(at.toISOString())}` : ''}`;
     const res = await fetch(`api/air?${q}`);

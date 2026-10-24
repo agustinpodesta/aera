@@ -70,7 +70,9 @@
 - [x] API caching: long on Vercel's CDN (cleared each deploy), browsers always revalidate (no stale scenes after fixes)
 - [x] Strip opacity 75%
 - [x] Old photos (per Agustín): place from the photo's GPS → the air there *now* + automatic sticker; the strip's TIME becomes now so the report never claims the photo's date. No GPS in the file → your current location, flagged "No location in photo · set it"
-- [ ] Verify on the Pixel whether the Android picker keeps photo GPS (preview says "Photo location" vs "No location in photo")
+- [x] "No reading" on gallery photos fixed: Android's picker zeroes GPS fields (reads as NaN), which Aera sent as lat=NaN → 400 (seen in Vercel logs). Now only real coordinates count; otherwise current location + "No location in photo · set it". Air lookup retries once before "no reading"
+- [ ] Verify on the Pixel whether the picker ever keeps photo GPS (preview says "Photo location" vs "No location in photo")
+- [x] Pinch to resize the strip (0.5×–1.77×, grows around its centre, follows the fingers), like an Instagram sticker; edge limits loosened 80% per Agustín (50 px top/bottom, 8 px sides)
 - [x] Movable strip: drag it anywhere in the preview (photo reframes when dragging elsewhere); clamped to IG's safe area (y 250–1670, 40 px sides); the darkening band follows the strip. (Strava's IG sticker is movable via the native Share-to-Stories sticker layer, which web apps can't use.)
 
 ## Gallery (added 23 Oct, PXLCAM-style)
