@@ -59,6 +59,9 @@
 - [x] Shutter now opens the phone's own camera (`<input capture="environment">`): full quality, no camera-permission prompt; in-browser viewfinder removed (`src/camera.js` deleted)
 - [x] Home screen: wordmark, shutter, latest-photo gallery button, import; location asked on open and prefetched (retries if it failed or went stale)
 - [x] Preview: drag to reposition the 9:16 crop (photo scaled once to just cover 1080×1920, so redraws are fast and export is identical); "Drag to frame" hint
+- [x] Sharper export: up to 2160×3840 (8 MP) when the photo has the detail (12 MP phone photos do); drag redraws at 1080 for smoothness; ~2.2 MB JPEG
+- [x] Lighter gradient behind the strip (max 40% instead of 60%), so the photo isn't muddied
+- [ ] Ultra HDR: Pixel/Android photos carry an HDR gain map that canvas drops (export is SDR, looks flatter in Google Photos on HDR screens). Option: re-attach a cropped gain map via libultrahdr (WASM) — bigger project
 - [ ] Scene detector: Hwahongmun, Suwon (37.287, 127.018) reads as Mountains — should be City; recalibrate (city places + relief rule)
 
 ## Gallery (added 23 Oct, PXLCAM-style)

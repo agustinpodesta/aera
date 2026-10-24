@@ -9,6 +9,7 @@ import { photoGps, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } 
 import { savePhoto, listPhotos, getPhoto, deletePhoto } from './gallery.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
+const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
 
 // Websites can't write to the Photos library directly. On iOS the only route is the
 // share sheet's "Save Image"; on Android a download lands in the phone's gallery.
@@ -23,7 +24,7 @@ const canvas = $('canvas');
 const state = {
   screen: 'home',
   here: null,          // Promise<{ gps, at, air: Promise, scene: Promise }>: prefetched before the shot
-  shot: null,          // { id, img, src, focus, takenAt, utcOffsetMin, live, gps, placeName, air, detected, loading }
+  shot: null,          // { id, img, src, scale, focus, takenAt, utcOffsetMin, live, gps, placeName, air, detected, loading }
   scene: 'auto',       // 'auto' | SCENES key | null
   file: null,          // the exported JPEG, prepared ahead so Share stays inside the tap
   viewer: null,        // { id, file, url } for the gallery photo being viewed
@@ -120,8 +121,9 @@ async function openFile(f, { live }) {
     notify('That photo couldn’t be opened. Try a JPEG or PNG.');
     return null;
   }
+  const scale = exportScale(img);
   const shot = {
-    id: newId(), img, src: workingCopy(img), focus: { x: 0.5, y: 0.5 },
+    id: newId(), img, src: workingCopy(img, scale), scale, focus: { x: 0.5, y: 0.5 },
     takenAt: new Date(live ? Date.now() : f.lastModified || Date.now()),
     live, gps: null, air: null, detected: null, loading: true,
   };
@@ -129,11 +131,18 @@ async function openFile(f, { live }) {
   return shot;
 }
 
-// Phone photos are 12+ MP; the story is 1080×1920. Scale once to just cover it, so
-// redraws (dragging the crop) are fast and the export is pixel-identical.
-function workingCopy(img) {
+// Export as sharp as the photo allows: a 12 MP phone photo's 9:16 crop is ~2300 px wide,
+// so it exports at 2160×3840; small images stay at 1080×1920 (Instagram's Story size).
+function exportScale(img) {
+  const { sw } = coverCrop(img);
+  return Math.max(1, Math.min(MAX_SCALE, Math.floor((sw / W) * 4) / 4));
+}
+
+// Scale the photo once to just cover the export size, so redraws (dragging the crop)
+// are fast and the export is pixel-identical.
+function workingCopy(img, k) {
   let { iw, ih } = coverCrop(img);
-  let scale = Math.max(W / iw, H / ih);
+  let scale = Math.max((W * k) / iw, (H * k) / ih);
   if (scale >= 1) return img;
   let src = img;
   // Halve in steps for a clean downscale, then land on the exact cover size.
@@ -200,9 +209,13 @@ function openPreview(shot) {
 
 const effectiveScene = () => (state.scene === 'auto' ? state.shot?.detected ?? null : state.scene);
 
+// While dragging, draw at 1080×1920 to keep it smooth; everything else at full export size.
 function draw() {
   const shot = state.shot;
-  compose(canvas, { photo: shot.src, focus: shot.focus, scene: effectiveScene(), reading: readingFor(shot) });
+  compose(canvas, {
+    photo: shot.src, focus: shot.focus, scale: dragging ? 1 : shot.scale,
+    scene: effectiveScene(), reading: readingFor(shot),
+  });
 }
 
 function render() {

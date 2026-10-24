@@ -67,11 +67,14 @@ export async function ensureFonts() {
  *   Time zone: utcOffsetMin (from photo EXIF) wins, then the IANA timeZone, else the device's.
  * @param {string|null} [opts.scene]  key of SCENES in scenes.js, or null for none
  * @param {{x:number, y:number}} [opts.focus]  which part of the photo the 9:16 crop keeps (0..1, 0.5 = centre)
+ * @param {number} [opts.scale]  pixel density: 1 = 1080×1920, 2 = 2160×3840. Layout stays in 1080×1920 units.
  */
-export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 } }) {
-  canvas.width = W;
-  canvas.height = H;
+export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 }, scale = 1 }) {
+  canvas.width = Math.round(W * scale);
+  canvas.height = Math.round(H * scale);
   const ctx = canvas.getContext('2d');
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.imageSmoothingQuality = 'high';
 
   if (photo) drawCover(ctx, photo, 0, 0, W, H, focus);
   else drawPlaceholder(ctx, 0, 0, W, H);
@@ -127,15 +130,16 @@ function drawPlaceholder(ctx, x, y, w, h) {
   ridge(h * 0.8, 40, '#2A3B31', 0.4);
 }
 
-// A soft darkening under the strip so it reads on bright photos (snow, sky, beach)
-// without looking like a pasted box.
+// A light darkening under the strip so it reads on bright photos (snow, sky, beach)
+// without muddying the photo; the text shadow does most of the work.
 function drawScrim(ctx, top) {
-  const g = ctx.createLinearGradient(0, top - 380, 0, H);
+  const from = top - 260;
+  const g = ctx.createLinearGradient(0, from, 0, H);
   g.addColorStop(0, 'rgba(10,14,12,0)');
-  g.addColorStop(0.4, 'rgba(10,14,12,0.38)');
-  g.addColorStop(1, 'rgba(10,14,12,0.6)');
+  g.addColorStop(0.45, 'rgba(10,14,12,0.24)');
+  g.addColorStop(1, 'rgba(10,14,12,0.4)');
   ctx.fillStyle = g;
-  ctx.fillRect(0, top - 380, W, H - top + 380);
+  ctx.fillRect(0, from, W, H - from);
 }
 
 /* ── Strip ────────────────────────────────────────────────────────────── */
