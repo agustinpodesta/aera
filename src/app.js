@@ -877,3 +877,19 @@ updateGalleryButton();
 
 // Installable app + "Share → Aera" from other apps (see sw.js).
 navigator.serviceWorker?.register('/sw.js').catch(() => {});
+
+// A photo shared to Aera from another app ("Share → Aera"): sw.js parked it on this
+// device; open it like a picked photo. Several shared at once → the first one.
+async function openShared() {
+  if (!new URLSearchParams(location.search).has('shared') || !('caches' in window)) return;
+  history.replaceState(null, '', '/');
+  const cache = await caches.open('aera-share');
+  const keys = await cache.keys();
+  const res = keys.length ? await cache.match(keys[0]) : null;
+  await Promise.all(keys.map((k) => cache.delete(k)));
+  if (!res) return;
+  const blob = await res.blob();
+  const name = decodeURIComponent(res.headers.get('x-name') || 'shared.jpg');
+  importFile(new File([blob], name, { type: blob.type, lastModified: +res.headers.get('x-modified') || Date.now() }));
+}
+openShared();

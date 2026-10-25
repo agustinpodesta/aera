@@ -1,7 +1,8 @@
 // Aera service worker. Its one job for now: receive photos shared to Aera from other
 // apps ("Share → Aera", Android only, once Aera is installed). The files are parked in
 // a cache on this device, then the page picks them up. Nothing is uploaded.
-// While we test whether shared photos keep their GPS, shares open the location lab.
+// Files by Google shares the original file, GPS included (tested on a Pixel, Oct 2026);
+// Google Photos' share strips it.
 
 const SHARE_CACHE = 'aera-share';
 
@@ -22,6 +23,6 @@ self.addEventListener('fetch', (e) => {
         'x-modified': String(f.lastModified),
       },
     }))));
-    return Response.redirect(`/lab.html?shared=${files.length}`, 303);
+    return Response.redirect(`/?shared=${files.length}`, 303);
   })());
 });

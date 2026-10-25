@@ -25,7 +25,10 @@
     .ok { color: var(--ok); } .bad { color: var(--bad); }
     .meta { color: var(--soft); font-size: 13px; word-break: break-all; }
     button { font: inherit; color: var(--bg); background: var(--fg); border: 0; border-radius: 999px; padding: 10px 18px; margin-top: 14px; }
-    #install[hidden], #copy[hidden] { display: none; }
+    #install[hidden], #copy[hidden], [hidden] { display: none !important; }
+    .test-btn { display: block; text-align: left; width: 100%; margin: 0; font: inherit; color: var(--fg); background: none; border: 1px solid var(--line); border-radius: 14px; padding: 14px; text-decoration: none; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 12px; }
+    .grid img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px; display: block; }
   </style>
 </head>
 <body>
@@ -37,6 +40,23 @@
     <label class="test"><b>Gallery picker</b><small>accept="image/*" (what Aera uses today)</small><input type="file" accept="image/*" data-path="Gallery picker"></label>
     <label class="test"><b>JPEG-only picker</b><small>accept=".jpg,.jpeg" (the "generic file input" trick)</small><input type="file" accept=".jpg,.jpeg" data-path="JPEG-only picker"></label>
     <label class="test"><b>Any file</b><small>no accept filter (opens Files)</small><input type="file" data-path="Any file"></label>
+    <label class="test"><b>Any file, from the camera folder</b><small>in Files: ☰ → your phone (e.g. Pixel 8) → DCIM → Camera. Not "Recent" or "Images"</small><input type="file" data-path="Any file via DCIM"></label>
+  </div>
+
+  <h2>3 · Camera folder inside Aera (no Files app)</h2>
+  <p>Aera asks once for your camera folder, then shows your photos itself. In the folder screen: go to <b>DCIM → Camera</b> → <b>Use this folder</b> → <b>Allow</b>.</p>
+  <div class="tests">
+    <button class="test-btn" id="connectFolder">Connect camera folder</button>
+    <button class="test-btn" id="reopenFolder" hidden>Reopen camera folder (after reload)</button>
+    <label class="test"><b>Folder upload input</b><small>webkitdirectory (older folder route), checks the newest 3</small><input type="file" webkitdirectory data-folder="Folder input"></label>
+  </div>
+  <div id="folderGrid" class="grid"></div>
+
+  <h2>4 · Open Files by Google from Aera</h2>
+  <p>Can Aera jump straight into Files by Google? Tap each and note what opens.</p>
+  <div class="tests">
+    <a class="test-btn" href="intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.google.android.apps.nbu.files;end">Open Files by Google (A)</a>
+    <a class="test-btn" href="intent://#Intent;package=com.google.android.apps.nbu.files;end">Open Files by Google (B)</a>
   </div>
 
   <h2>2 · Share into Aera</h2>
@@ -45,6 +65,7 @@
     <li>Open <b>Google Photos</b>, pick the photo → Share → <b>Aera</b>. This page opens with the result.</li>
     <li>Then try the same photo from <b>Files by Google</b> (Images or DCIM → Camera) → Share → <b>Aera</b>.</li>
   </ol>
+  <p>Done: only Files by Google kept the GPS. Shares now open the Aera editor, not this page.</p>
 
   <h2>Results</h2>
   <div id="results"><p>No photos checked yet.</p></div>
@@ -98,6 +119,95 @@
       }
       history.replaceState(null, '', '/lab.html');
     }
+
+    // ── Camera folder: read the original files straight from DCIM/Camera ──
+    const IMG = /\.(jpe?g|heic|heif|png|webp|dng)$/i;
+    function addNote(text) {
+      if (!lines.length) results.replaceChildren();
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = '<div class="meta"></div>';
+      row.querySelector('.meta').textContent = text;
+      results.prepend(row);
+      lines.push(text);
+      document.getElementById('copy').hidden = false;
+    }
+
+    function idb() {
+      return new Promise((ok, no) => {
+        const r = indexedDB.open('aera-lab', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('kv');
+        r.onsuccess = () => ok(r.result);
+        r.onerror = () => no(r.error);
+      });
+    }
+    async function kv(key, value) {
+      const d = await idb();
+      return new Promise((ok, no) => {
+        const t = d.transaction('kv', value === undefined ? 'readonly' : 'readwrite');
+        const r = value === undefined ? t.objectStore('kv').get(key) : t.objectStore('kv').put(value, key);
+        t.oncomplete = () => ok(r.result);
+        t.onerror = () => no(t.error);
+      });
+    }
+
+    async function newestFiles(dir, count) {
+      const names = [];
+      for await (const [name, h] of dir.entries()) if (h.kind === 'file' && IMG.test(name)) names.push([name, h]);
+      names.sort((a, b) => (a[0] < b[0] ? 1 : -1)); // PXL_YYYYMMDD_… sorts by date
+      const files = await Promise.all(names.slice(0, 40).map(([, h]) => h.getFile()));
+      return { total: names.length, files: files.sort((a, b) => b.lastModified - a.lastModified).slice(0, count) };
+    }
+
+    async function showFolder(dir, how) {
+      const t0 = performance.now();
+      const { total, files } = await newestFiles(dir, 18);
+      addNote(`Camera folder (${how}): "${dir.name}", ${total} photos listed in ${Math.round(performance.now() - t0)} ms`);
+      const grid = document.getElementById('folderGrid');
+      grid.replaceChildren(...files.map((f) => {
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.src = URL.createObjectURL(f);
+        img.onclick = () => check(f, 'Camera folder');
+        return img;
+      }));
+      for (const f of files.slice(0, 3)) await check(f, 'Camera folder');
+    }
+
+    const hasPicker = 'showDirectoryPicker' in window;
+    if (!hasPicker) document.getElementById('connectFolder').textContent = 'Connect camera folder (not supported in this browser)';
+    document.getElementById('connectFolder').onclick = async () => {
+      if (!hasPicker) return addNote('Camera folder: showDirectoryPicker not available');
+      try {
+        const dir = await showDirectoryPicker({ id: 'aera-camera', mode: 'read', startIn: 'pictures' });
+        try { await kv('camera', dir); } catch (e) { addNote('Could not remember the folder: ' + e.message); }
+        await showFolder(dir, 'just connected');
+      } catch (e) { addNote('Camera folder: ' + e.name + ' ' + e.message); }
+    };
+
+    try {
+      const saved = hasPicker ? await kv('camera') : null;
+      if (saved) {
+        const state = await saved.queryPermission({ mode: 'read' });
+        addNote(`Camera folder remembered after reload: permission "${state}"`);
+        const btn = document.getElementById('reopenFolder');
+        btn.hidden = false;
+        btn.onclick = async () => {
+          try {
+            const s2 = state === 'granted' ? state : await saved.requestPermission({ mode: 'read' });
+            addNote(`Reopen camera folder: permission "${s2}"`);
+            if (s2 === 'granted') await showFolder(saved, 'reopened');
+          } catch (e) { addNote('Reopen: ' + e.name + ' ' + e.message); }
+        };
+      }
+    } catch (e) { addNote('Remembered folder check: ' + e.message); }
+
+    document.querySelector('input[data-folder]').addEventListener('change', async (e) => {
+      const files = [...e.target.files].filter((f) => IMG.test(f.name)).sort((a, b) => b.lastModified - a.lastModified);
+      addNote(`Folder input: ${files.length} photos`);
+      for (const f of files.slice(0, 3)) await check(f, 'Folder input');
+    });
 
     document.getElementById('copy').onclick = async () => {
       const text = [navigator.userAgent, ...lines].join('\n');
