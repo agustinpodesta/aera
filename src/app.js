@@ -874,3 +874,6 @@ $('tapHint').hidden = hasStarted();
 // Ask for location as soon as Aera opens, so air + scene are ready when the photo comes back.
 locateHere();
 updateGalleryButton();
+
+// Installable app + "Share → Aera" from other apps (see sw.js).
+navigator.serviceWorker?.register('/sw.js').catch(() => {});

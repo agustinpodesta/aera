@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Aera location lab</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#121310">
+  <style>
+    :root { --bg: #121310; --fg: #F2EDE4; --soft: rgba(242,237,228,.62); --line: rgba(242,237,228,.14); --ok: #8ED16B; --bad: #F28A2B; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 ui-monospace, "IBM Plex Mono", Menlo, monospace; padding: 20px 16px 48px; }
+    h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: .04em; }
+    h2 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--soft); margin: 28px 0 10px; font-weight: 500; }
+    p, li { color: var(--soft); margin: 6px 0; }
+    ol { padding-left: 20px; }
+    .tests { display: grid; gap: 10px; }
+    label.test { display: block; border: 1px solid var(--line); border-radius: 14px; padding: 14px; cursor: pointer; }
+    label.test b { color: var(--fg); font-weight: 500; }
+    label.test small { display: block; color: var(--soft); }
+    label.test input { display: none; }
+    .row { border-top: 1px solid var(--line); padding: 12px 0; }
+    .row .verdict { font-weight: 500; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); }
+    .meta { color: var(--soft); font-size: 13px; word-break: break-all; }
+    button { font: inherit; color: var(--bg); background: var(--fg); border: 0; border-radius: 999px; padding: 10px 18px; margin-top: 14px; }
+    #install[hidden], #copy[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Aera · location lab</h1>
+  <p>Checks which way of getting a photo into Aera keeps its GPS. Use a photo you know has a location (Google Photos shows it under ⓘ). Nothing is uploaded; results stay on this screen.</p>
+
+  <h2>1 · Pick inside Aera</h2>
+  <div class="tests">
+    <label class="test"><b>Gallery picker</b><small>accept="image/*" (what Aera uses today)</small><input type="file" accept="image/*" data-path="Gallery picker"></label>
+    <label class="test"><b>JPEG-only picker</b><small>accept=".jpg,.jpeg" (the "generic file input" trick)</small><input type="file" accept=".jpg,.jpeg" data-path="JPEG-only picker"></label>
+    <label class="test"><b>Any file</b><small>no accept filter (opens Files)</small><input type="file" data-path="Any file"></label>
+  </div>
+
+  <h2>2 · Share into Aera</h2>
+  <ol>
+    <li>Install Aera: Chrome menu ⋮ → <b>Add to Home screen</b> → Install. <button id="install" hidden>Install Aera</button></li>
+    <li>Open <b>Google Photos</b>, pick the photo → Share → <b>Aera</b>. This page opens with the result.</li>
+    <li>Then try the same photo from <b>Files by Google</b> (Images or DCIM → Camera) → Share → <b>Aera</b>.</li>
+  </ol>
+
+  <h2>Results</h2>
+  <div id="results"><p>No photos checked yet.</p></div>
+  <button id="copy" hidden>Copy results</button>
+
+  <script type="module">
+    import * as exifr from 'https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.esm.mjs';
+
+    const lines = [];
+    const results = document.getElementById('results');
+
+    async function check(file, path) {
+      let tags = null, error = null;
+      try { tags = await exifr.parse(file, { gps: true, tiff: true, exif: true }); } catch (e) { error = e.message; }
+      const lat = tags?.latitude, lon = tags?.longitude;
+      const real = Number.isFinite(lat) && Number.isFinite(lon) && !(Math.abs(lat) < 1e-6 && Math.abs(lon) < 1e-6);
+      const hasGpsTags = tags && ('GPSLatitude' in tags || 'GPSLongitude' in tags);
+      const verdict = real ? `GPS kept: ${lat.toFixed(4)}, ${lon.toFixed(4)}`
+        : hasGpsTags ? 'GPS blanked (tags present, values zeroed)'
+        : 'No GPS in file';
+      const taken = tags?.DateTimeOriginal instanceof Date ? tags.DateTimeOriginal.toISOString().slice(0, 16) : '—';
+      const meta = `${file.name || '(no name)'} · ${(file.size / 1e6).toFixed(2)} MB · ${file.type || '?'} · taken ${taken} · ${[tags?.Make, tags?.Model].filter(Boolean).join(' ') || 'no camera tags'}${error ? ' · read error: ' + error : ''}`;
+      if (!lines.length) results.replaceChildren();
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = '<div class="verdict"></div><div class="meta"></div>';
+      row.querySelector('.verdict').textContent = `${path}: ${verdict}`;
+      row.querySelector('.verdict').classList.add(real ? 'ok' : 'bad');
+      row.querySelector('.meta').textContent = meta;
+      results.prepend(row);
+      lines.push(`${path}: ${verdict} | ${meta}`);
+      document.getElementById('copy').hidden = false;
+    }
+
+    document.querySelectorAll('input[type=file]').forEach((input) => {
+      input.addEventListener('change', () => {
+        for (const f of input.files) check(f, input.dataset.path);
+        input.value = '';
+      });
+    });
+
+    // Photos shared to Aera were parked by the service worker.
+    if (new URLSearchParams(location.search).has('shared') && 'caches' in window) {
+      const cache = await caches.open('aera-share');
+      for (const req of await cache.keys()) {
+        const res = await cache.match(req);
+        const blob = await res.blob();
+        const name = decodeURIComponent(res.headers.get('x-name') || 'shared');
+        await check(new File([blob], name, { type: blob.type, lastModified: +res.headers.get('x-modified') || Date.now() }), 'Shared to Aera');
+        await cache.delete(req);
+      }
+      history.replaceState(null, '', '/lab.html');
+    }
+
+    document.getElementById('copy').onclick = async () => {
+      const text = [navigator.userAgent, ...lines].join('\n');
+      try { await navigator.clipboard.writeText(text); document.getElementById('copy').textContent = 'Copied'; }
+      catch { prompt('Copy these results:', text); }
+    };
+
+    let deferred = null;
+    addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; document.getElementById('install').hidden = false; });
+    document.getElementById('install').onclick = () => deferred?.prompt();
+
+    navigator.serviceWorker?.register('/sw.js').catch(() => {});
+  </script>
+</body>
+</html>
