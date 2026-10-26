@@ -50,7 +50,8 @@ let X0 = (W - STRIP_W) / 2, X1 = X0 + STRIP_W, CX = W / 2;
 
 const ROW_H = 92;          // single-line row
 const ROW_H_2 = 124;       // two-line row (long AQI category)
-const LABEL = `500 25px ${MONO}`;
+const LABEL = `500 33px ${MONO}`; // AQI / AIR / TIME (30% up from 25px, per Agustín)
+const LABEL_SPACING = 5;
 const VALUE_SIZE = 60;
 const DOT_R = 15;
 const ICON = 66;
@@ -190,7 +191,7 @@ function drawStrip(ctx, r, rows, top, scene) {
   for (const row of rows) {
     const two = row.lines.length > 1;
     const h = two ? ROW_H_2 : ROW_H;
-    const labelW = measureSpaced(ctx, row.label, LABEL, 4);
+    const labelW = measureSpaced(ctx, row.label, LABEL, LABEL_SPACING);
     const room = STRIP_W - labelW - 40;
     const longest = row.lines.reduce((a, b) => (b.length > a.length ? b : a));
     const size = fitSize(ctx, longest, (s) => `500 ${s}px ${MONO}`, two ? 40 : VALUE_SIZE, 26, room, 1);
@@ -208,7 +209,7 @@ function drawStrip(ctx, r, rows, top, scene) {
     }
     ctx.font = LABEL;
     ctx.fillStyle = INK.soft;
-    spaced(ctx, row.label, X0, lastBase, 4, 'left');
+    spaced(ctx, row.label, X0, lastBase, LABEL_SPACING, 'left');
     y += h;
   }
 

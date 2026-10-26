@@ -144,4 +144,6 @@ All queried by coordinates (never city names): place names only find coordinates
 - [x] An older photo with no known place (no GPS, no trip/trail match) asks "Where was this taken?" before showing any air; first option is "<your town> · Where you are now" (one tap, no keyboard); the strip waits ("…") until a place is chosen. Photos from the last hour still use where you are, silently
 - [x] "Here" replaced by a real town name: /api/scene now returns `place` (nearest city/town label from the OpenFreeMap z10 tile, English/Latin names first): Suwon, San Isidro, Hallim, Seoul, Bariloche
 - [x] Sticker is always automatic: the "Sticker: … · change" picker is gone
+- [x] Strip labels AQI / AIR / TIME 30% bigger (25 → 33 px, spacing 4 → 5)
+- [x] Home video bug (Agustín's test): after coming back from the photo picker, the clips only switched as stills. A single refused play() made the player give up on video for good. Now a refusal shows stills briefly and retries (0.4 s, 1.5 s, 4 s), again when the page is shown, and on the next tap
 
