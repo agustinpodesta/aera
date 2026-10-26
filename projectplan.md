@@ -86,7 +86,7 @@
 - [x] Back from a picked/shared photo discards it (per Agustín): imports stay out of the Aera gallery until shared or saved; back returns to where you picked it with a one-tap "Choose another photo" (a back gesture can't open the picker); "Retake" becomes "Another" for picked photos; back with the place sheet open only closes the sheet. Camera shots still save right away
 - [x] "Where in Buenos Aires?" step after picking a suggested city: optional search with nearby results first (distance shown, namesakes far away hidden), "Just <city>" to keep it; only the final place goes into recents and the trip trail
 - [x] Checked IQAir for unmonitored places: the API already returns IQAir's own reading for places like San Isidro (AQI 13, "San Isidro" — likely their satellite-based estimate; the API has no "estimated" flag), so picking the precise place gets it
-- [ ] Google Air Quality API (approved by Agustín, Oct 2026) — see "Google air data" below
+- [ ] Google Air Quality API — on hold: Agustín prefers APIs that need no billing details (see "Free air data")
 - [ ] Remove `/lab.html` from the live site once testing is done
 - [ ] Real auto-location fallback if sharing also strips: thin Android shell (TWA + small native picker using the new photo-picker location option) — Play Store closed test needs 12 testers × 14 days for new personal accounts
 - [x] Pinch to resize the strip (0.5×–1.77×, grows around its centre, follows the fingers), like an Instagram sticker; edge limits loosened 80% per Agustín (50 px top/bottom, 8 px sides)
@@ -117,7 +117,7 @@
 ## Later (P1, after validation)
 Multiple templates · front/rear switch · film effects · ambient AQI colour · local history · gallery · EXIF import (needs historical data)
 
-## Google air data (planned)
+## Google air data (on hold — needs billing)
 Why: a 500 m model everywhere (no "nearest city" gaps) and hourly history for the last 30 days, so a photo up to 30 days old shows the air *when it was taken*. Billing: one "Air Quality Usage" SKU, 10,000 free calls/month, then $5 per 1,000 (history = per page; one hour = one page).
 - [ ] Agustín: Google Cloud project + billing + Air Quality API + restricted key + daily quota + budget alert; key in Vercel as `GOOGLE_AIR_QUALITY_KEY` (never in chat)
 - [ ] Verify with the key: US AQI (`usa_epa`) for non-US places via `customLocalAqis` (Korea, Argentina); fallback = compute US AQI from `POLLUTANT_CONCENTRATION` with EPA breakpoints
@@ -126,4 +126,12 @@ Why: a 500 m model everywhere (no "nearest city" gaps) and hourly history for th
 - [ ] Attribution: strip footer "DATA GOOGLE MAPS" and info line "Google Maps" when Google supplied the reading (Google policy: visible, unmodified "Google Maps" text attribution)
 - [ ] Caching: keep 10 min CDN for "now"; confirm the Maps Platform terms allow caching past hours before using 30-day CDN caching for history
 - [ ] Sanity check Google vs IQAir on Seoul, Suwon, San Isidro, Jeju; then deploy
+
+## Free air data (Oct 2026 check)
+All queried by coordinates (never city names): place names only find coordinates.
+- IQAir Community (in use): free key, no card; 5/min, 500/day, 10k/month; US AQI incl. IQAir's estimates for unmonitored places; no history; commercial terms unclear
+- Open-Meteo (in use as fallback): no key, no card; CAMS model, US AQI with proper EPA averaging; Europe ~11 km hourly, global ~45 km 3-hourly; history back to Aug 2022 (global); free = non-commercial only
+- OpenWeather Air Pollution: free key, no card; 60/min, 1M/month; hourly history from 27 Nov 2020; only a 1–5 index, so US AQI would be computed from concentrations; commercial terms unclear — not needed now
+- API Ninjas: free key, but no commercial use on the free tier, no history, AQI scale undocumented — skip
+- [ ] Decide: real air at the photo's time for older photos via Open-Meteo history (free, already coded as `openMeteoHour`, coarser model) vs keep "the air now"
 
