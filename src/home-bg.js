@@ -3,7 +3,7 @@
 // loads in the background. Reduced motion or data saver → one still, no video.
 // Plays only while the home screen is visible.
 
-const CLIPS = 12;
+const CLIPS = [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12]; // 09 dropped (readable car plates)
 const FADE_BEFORE_END = 0.9; // seconds: start the next clip this long before the current ends
 const STILL_MS = 4200;        // when video can't autoplay, stills rotate at the clip pace
 
@@ -12,7 +12,7 @@ const clipUrl = (n) => `media/home/${pad(n)}.mp4`;
 const stillUrl = (n) => `media/home/${pad(n)}.jpg`;
 
 function shuffled() {
-  const a = Array.from({ length: CLIPS }, (_, i) => i + 1);
+  const a = [...CLIPS];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];

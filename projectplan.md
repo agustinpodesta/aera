@@ -138,5 +138,5 @@ All queried by coordinates (never city names): place names only find coordinates
 ## Home & credits
 - [x] Home background: 12 of Agustín's trip clips (media/home, 540×960, ~4 s, silent, ~470 KB each, 5.6 MB total; GPS/location metadata stripped from every file) crossfade in random order behind a top/bottom gradient; first still shows instantly, only the next clip preloads; pauses off the home screen and in background tabs; reduced motion or data saver → a still; blocked autoplay (e.g. iOS low power) → rotating stills
 - [x] Credits on home: "Air: IQAir · Open-Meteo (CAMS, CC BY 4.0) · Map © OpenStreetMap contributors" (Open-Meteo's free tier covers free, ad-free apps)
-- [ ] Clip 09 (cherry blossoms) shows two readable car plates — keep, blur or drop (Agustín to decide)
+- [x] Clip 09 (cherry-blossom road, readable car plates) dropped per Agustín — 11 clips now
 
