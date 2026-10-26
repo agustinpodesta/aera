@@ -18,6 +18,12 @@
 <body>
   <!-- Home: the shutter opens the phone's own camera (full-quality photos) -->
   <section class="screen home" id="home" aria-label="Aera">
+    <!-- Trip clips behind the home screen (src/home-bg.js) -->
+    <div class="home-bg" id="homeBg" aria-hidden="true">
+      <img class="home-media" alt="" decoding="async" />
+      <video class="home-media" muted playsinline preload="auto" disablepictureinpicture></video>
+      <video class="home-media" muted playsinline preload="auto" disablepictureinpicture></video>
+    </div>
     <div class="home-inner">
       <h1 class="wordmark">AERA</h1>
       <p class="pitch">Take a photo. Aera adds the air you’re breathing.</p>
@@ -40,7 +46,7 @@
         <small>Best quality · from your camera app</small>
       </button>
     </div>
-    <p class="fine home-note">Photos stay on your device.</p>
+    <p class="fine home-note">Photos stay on your device.<br /><span class="credits">Air: IQAir · Open-Meteo (CAMS, CC BY 4.0) · Map © OpenStreetMap contributors</span></p>
   </section>
 
   <!-- Preview -->

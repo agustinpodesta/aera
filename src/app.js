@@ -9,6 +9,7 @@ import { photoGps, photoLocation, photoTakenAt, fetchScene, fetchAir, locateMe, 
 import { savePhoto, listPhotos, getPhoto, getEditable, deletePhoto } from './gallery.js';
 import { recordPlace, placeAt } from './trail.js';
 import { citiesAtOffset, offsetIn, offsetLabel } from './cities.js';
+import { homeBackground } from './home-bg.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
@@ -28,6 +29,8 @@ const IS_ANDROID = /Android/i.test(navigator.userAgent);
 const $ = (id) => document.getElementById(id);
 const fontsReady = ensureFonts(); // the first render waits for it
 const canvas = $('canvas');
+
+let homeBg = null; // the trip clips behind home; set up at the end of this file
 
 const state = {
   screen: 'home',
@@ -49,6 +52,7 @@ function show(screen) {
   if (screen !== 'preview') closeSheet();
   if (screen === 'preview') $('pickAgain').hidden = true;
   state.screen = screen;
+  homeBg?.setActive(screen === 'home');
 }
 
 function notify(text) {
@@ -1012,6 +1016,9 @@ function markStarted() {
   $('tapHint').hidden = true;
 }
 $('tapHint').hidden = hasStarted();
+
+homeBg = homeBackground($('homeBg'));
+homeBg.setActive(state.screen === 'home');
 
 // Ask for location as soon as Aera opens, so air + scene are ready when the photo comes back.
 locateHere();

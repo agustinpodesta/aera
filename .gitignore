@@ -27,3 +27,6 @@ samples/*
 !samples/samples.json
 .env*
 !.env.example
+
+# Original trip videos (large, may contain GPS); only the compressed clips in media/home are published
+Videos for homepage/

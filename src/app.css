@@ -78,7 +78,27 @@ body {
   display: flex; align-items: center; justify-content: space-around;
   height: 112px; flex: none;
 }
-.home-note { text-align: center; padding: 0 16px 16px; }
+.home-note { text-align: center; padding: 0 16px 16px; text-shadow: 0 1px 8px rgba(0, 0, 0, .6); }
+.home-note .credits { font-size: 10px; opacity: .8; }
+
+/* Trip clips behind the home screen: full-bleed, crossfading, darkened top and bottom
+   so the wordmark and the controls stay readable on any frame. */
+.home { isolation: isolate; }
+.home-bg { position: absolute; inset: 0; z-index: -1; overflow: hidden; background: var(--night); }
+.home-media {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; opacity: 0; transition: opacity 1s ease;
+  pointer-events: none;
+}
+.home-media.on { opacity: 1; }
+.home-bg::after {
+  content: ""; position: absolute; inset: 0;
+  background:
+    linear-gradient(to bottom, rgba(14, 15, 13, .62) 0%, rgba(14, 15, 13, .18) 38%, rgba(14, 15, 13, .18) 52%, rgba(14, 15, 13, .82) 100%);
+}
+.home .wordmark, .home .pitch { text-shadow: 0 2px 18px rgba(0, 0, 0, .45); }
+.home .pitch { color: rgba(242, 237, 228, .86); }
+.home .btn.recent { background: rgba(14, 15, 13, .38); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .shutter {
   width: 76px; height: 76px; padding: 6px;
   border-radius: 50%; border: 3px solid var(--paper); background: transparent; cursor: pointer;

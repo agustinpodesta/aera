@@ -135,3 +135,8 @@ All queried by coordinates (never city names): place names only find coordinates
 - API Ninjas: free key, but no commercial use on the free tier, no history, AQI scale undocumented — skip
 - [x] Older photos get the air from the hour they were taken (per Agustín): > 2 h old and since Aug 2022 → Open-Meteo modeled reading for that hour, TIME = the photo's own local time, strip says "DATA OPEN-METEO (MODELED), FOR hh:mm", place line says "when taken". 1–2 h old, before Aug 2022, or no model data for that hour → the air now with TIME = now. Photos taken now keep IQAir
 
+## Home & credits
+- [x] Home background: 12 of Agustín's trip clips (media/home, 540×960, ~4 s, silent, ~470 KB each, 5.6 MB total; GPS/location metadata stripped from every file) crossfade in random order behind a top/bottom gradient; first still shows instantly, only the next clip preloads; pauses off the home screen and in background tabs; reduced motion or data saver → a still; blocked autoplay (e.g. iOS low power) → rotating stills
+- [x] Credits on home: "Air: IQAir · Open-Meteo (CAMS, CC BY 4.0) · Map © OpenStreetMap contributors" (Open-Meteo's free tier covers free, ad-free apps)
+- [ ] Clip 09 (cherry blossoms) shows two readable car plates — keep, blur or drop (Agustín to decide)
+
