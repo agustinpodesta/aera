@@ -4,7 +4,6 @@
 // Photos never leave the device; only rounded coordinates go to /api/air and /api/scene.
 
 import { compose, coverCrop, ensureFonts, W, H, STRIP_HOME } from './compose.js';
-import { SCENES } from './scenes.js';
 import { photoGps, photoLocation, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } from './location.js';
 import { savePhoto, listPhotos, getPhoto, getEditable, deletePhoto } from './gallery.js';
 import { recordPlace, placeAt } from './trail.js';
@@ -15,8 +14,10 @@ const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
 const MAX_ZOOM = 4;         // pinch-zoom limit for the photo
 const RECENT_MS = 60 * 60e3; // older than this, a photo counts as "older" (place guessing, TIME)
-// Photos older than this get the air from the hour they were taken (Open-Meteo's model,
-// with the photo's own TIME), if the model's archive reaches back that far.
+// Air from the hour an older photo was taken (Open-Meteo's model) is switched off: in
+// Suwon it read about twice IQAir's measured air (56 vs 31, Oct 2026), so older photos
+// get the measured air now, with TIME now. The plumbing stays for a better source.
+const PHOTO_TIME_AIR = false;
 const HISTORY_AFTER_MS = 2 * 3600e3; // matches the server's PAST_AFTER_MS
 const HISTORY_FROM = Date.UTC(2022, 7, 1); // global model archive starts August 2022
 
@@ -31,12 +32,13 @@ const fontsReady = ensureFonts(); // the first render waits for it
 const canvas = $('canvas');
 
 let homeBg = null; // the trip clips behind home; set up at the end of this file
+let hereName = null; // the town you're in now (from the map), for "Suwon · where you are now"
 
 const state = {
   screen: 'home',
   here: null,          // Promise<{ gps, at, air: Promise, scene: Promise }>: prefetched before the shot
   shot: null,          // { id, img, src, scale, focus, takenAt, utcOffsetMin, live, gps, placeName, air, detected, loading }
-  scene: 'auto',       // 'auto' | SCENES key | null
+  scene: 'auto',       // always 'auto' now: the sticker follows the place
   file: null,          // the exported JPEG, prepared ahead so Share stays inside the tap
   viewer: null,        // { id, file, url } for the gallery photo being viewed
 };
@@ -102,7 +104,7 @@ function locateHere(force = false) {
     gps,
     at: Date.now(),
     air: gps ? fetchAir(gps) : null,
-    scene: gps ? fetchScene(gps).then((b) => b.scene ?? null) : null,
+    area: gps ? fetchScene(gps).then((b) => { if (b.place) hereName = b.place; return b; }) : null,
   }));
   const prev = state.here;
   state.here = !force && prev
@@ -145,19 +147,19 @@ function awayOffset(shot) {
   return off === -shot.takenAt.getTimezoneOffset() ? null : off;
 }
 
-// When was the air on the strip? A photo from the last hour: now. Older than 2 h (and
-// since Aug 2022): the hour it was taken, at the photo's own TIME. In between, or older
-// than the archive: the air now, and TIME becomes now so it never claims the past.
+// When was the air on the strip? A photo from the last hour: the air now at its own
+// TIME. Older: the air now, and TIME becomes now so it never claims the past.
 function datePhoto(shot) {
   const t = shot.takenAt.getTime(), age = Date.now() - t;
   shot.older = age > RECENT_MS;
   shot.live = true;
   shot.reportAt = undefined;
-  if (age > HISTORY_AFTER_MS && t >= HISTORY_FROM) shot.live = false;
+  if (PHOTO_TIME_AIR && age > HISTORY_AFTER_MS && t >= HISTORY_FROM) shot.live = false;
   else if (shot.older) shot.reportAt = new Date();
 }
 
 async function importFile(f) {
+  if (!state.here) locateHere();
   const shot = await openFile(f, { live: true, pending: true });
   if (!shot) return;
   const [{ gps }, taken] = await Promise.all([photoLocation(f), photoTakenAt(f)]);
@@ -172,13 +174,13 @@ async function importFile(f) {
     shot.placeName = seen.name ?? undefined;
     return loadPlace(shot, seen.gps, {}, 'trail');
   }
-  if (awayOffset(shot) != null) {
-    loadPlace(shot, null);
-    if (state.shot === shot && state.screen === 'preview') openSheet();
-    return;
-  }
-  const here = await locateHere();
-  loadPlace(shot, here.gps, here, here.gps ? 'here' : null);
+  // An older photo with no place we know: ask before showing any air (where you are
+  // now is the first, one-tap answer). Taken just now: where you are, unless unknown.
+  const here = shot.older ? null : await locateHere();
+  if (here?.gps) return loadPlace(shot, here.gps, here, 'here');
+  loadPlace(shot, null);
+  if (!shot.older) locateHere(); // warm up "where you are now" for the sheet
+  if (state.shot === shot && state.screen === 'preview') openSheet();
 }
 
 // The load event, not img.decode(): decode() can wait for a painted frame, which never
@@ -220,7 +222,7 @@ function editState(shot) {
   return {
     focus: shot.focus, zoom: shot.zoom ?? 1, ink: shot.ink ?? 'light', strip: shot.strip, sceneChoice: state.scene,
     takenAt: +shot.takenAt, utcOffsetMin: shot.utcOffsetMin ?? null, reportAt: shot.reportAt ? +shot.reportAt : null, older: !!shot.older,
-    live: shot.live, gps: shot.gps, gpsSource: shot.gpsSource ?? null, placeName: shot.placeName ?? null,
+    live: shot.live, gps: shot.gps, gpsSource: shot.gpsSource ?? null, placeName: shot.placeName ?? null, areaName: shot.areaName ?? null,
     air: shot.air, detected: shot.detected,
   };
 }
@@ -238,7 +240,7 @@ async function openEditor(id) {
     focus: e.focus, zoom: e.zoom ?? 1, ink: e.ink ?? 'light', strip: e.strip, sceneChoice: e.sceneChoice,
     takenAt: new Date(e.takenAt), utcOffsetMin: e.utcOffsetMin, reportAt: e.reportAt ? new Date(e.reportAt) : undefined,
     older: e.older ?? Boolean(e.reportAt),
-    live: e.live, gps: e.gps, gpsSource: e.gpsSource, placeName: e.placeName ?? undefined,
+    live: e.live, gps: e.gps, gpsSource: e.gpsSource, placeName: e.placeName ?? undefined, areaName: e.areaName ?? null,
     air: e.air, detected: e.detected, loading: false, savedAt: new Date(meta.createdAt),
   });
 }
@@ -283,14 +285,16 @@ async function loadPlace(shot, gps, pre = {}, source = null) {
   shot.gpsSource = gps ? source : null; // 'photo' | 'here' | 'trail' | 'search' | 'chosen-here'
   shot.air = null;
   shot.detected = null;
+  shot.areaName = null;
   shot.loading = !!gps;
   refresh(shot);
   if (!gps) return; // no location: the preview asks for one
   const at = shot.live ? null : shot.takenAt;
-  let [air, scene] = await Promise.all([
+  let [air, area] = await Promise.all([
     (shot.live && pre.air) || fetchAir(gps, at), // a prefetched reading is the air now: live shots only
-    pre.scene ?? fetchScene(gps).then((b) => b.scene ?? null),
+    pre.area ?? fetchScene(gps),
   ]);
+  const scene = area?.scene ?? null;
   // One retry before showing "no reading": the air services occasionally rate-limit or time out.
   if (!air && shot.gps === gps) air = await new Promise((r) => setTimeout(r, 800)).then(() => fetchAir(gps, at));
   if (shot.gps !== gps) return; // a different place was picked meanwhile
@@ -300,17 +304,17 @@ async function loadPlace(shot, gps, pre = {}, source = null) {
     if (shot.gps !== gps) return;
     if (Number.isFinite(now?.aqi)) { air = now; shot.live = true; shot.reportAt = new Date(); }
   }
-  Object.assign(shot, { air, detected: scene, loading: false });
+  Object.assign(shot, { air, detected: scene, areaName: area?.place ?? null, loading: false });
   refresh(shot);
 }
 
-const refresh = (shot) => { if (state.shot === shot) { renderPlace(); renderScenes(); render(); } };
+const refresh = (shot) => { if (state.shot === shot) { renderPlace(); render(); } };
 
 function readingFor(shot) {
   // Old photos report the air now, so TIME is now (device clock), not the photo's time.
   const at = shot.reportAt ?? shot.takenAt;
   const base = { takenAt: at, updatedAt: at, utcOffsetMin: shot.reportAt ? null : shot.utcOffsetMin ?? null };
-  if (shot.loading) return { ...base, aqi: null, pending: true };
+  if (shot.loading || !shot.gps) return { ...base, aqi: null, pending: true }; // no place yet: wait for one
   if (!shot.air) return { ...base, aqi: null };
   return { ...base, ...shot.air };
 }
@@ -319,8 +323,7 @@ function readingFor(shot) {
 
 function openPreview(shot) {
   state.shot = shot;
-  state.scene = shot.sceneChoice ?? 'auto';
-  setScenePicker(false);
+  state.scene = 'auto'; // the sticker always follows the place: Aera picks it
   // Reopened from the gallery: back returns to the gallery, and Retake becomes Delete.
   // A picked photo: back returns to where you picked it (and discards it); Retake
   // becomes Another. A camera shot from the gallery screen replaces that entry.
@@ -332,7 +335,6 @@ function openPreview(shot) {
   renderInk();
   show('preview');
   renderPlace();
-  renderScenes();
   setupDrag(shot);
   fontsReady.finally(() => { if (state.shot === shot) render(); });
 }
@@ -636,30 +638,11 @@ function renderPlace() {
     return;
   }
   const air = shot.air;
-  const where = shot.placeName ?? air?.place ?? (shot.gpsSource === 'photo' ? 'Photo location' : 'Here');
+  const where = shot.placeName ?? air?.place ?? shot.areaName ?? (shot.gpsSource === 'photo' ? 'Photo location' : 'Your location');
   const what = !air ? 'air data unavailable'
     : air.aqi == null ? (air.historical ? 'no reading for that time' : 'no reading here right now')
     : (air.scope === 'modeled' ? `${air.source}, modeled` : air.source) + (air.historical ? ', when taken' : '');
   el.textContent = guessed ? `${where} · ${what} · change` : `${where} · ${what}`;
-}
-
-// The sticker is automatic; the chips stay tucked away behind "change".
-function renderScenes() {
-  const shot = state.shot;
-  const current = effectiveScene();
-  $('sceneToggle').textContent = shot?.loading && state.scene === 'auto' ? 'Sticker: …'
-    : current ? `Sticker: ${SCENES[current].label}` : 'No sticker';
-  const auto = shot?.loading ? 'Auto · …' : shot?.detected ? `Auto · ${SCENES[shot.detected].label}` : 'Auto · none';
-  const options = [['auto', auto], ...Object.entries(SCENES).map(([id, s]) => [id, s.label]), [null, 'None']];
-  $('scenes').replaceChildren(...options.map(([value, label]) => {
-    const b = document.createElement('button');
-    const on = state.scene === value;
-    b.className = 'chip' + (on ? ' on' : '');
-    b.setAttribute('aria-pressed', String(on));
-    b.textContent = label;
-    b.onclick = () => { state.scene = value; setScenePicker(false); renderScenes(); render(); };
-    return b;
-  }));
 }
 
 // White or black strip; black is for very bright photos (snow, sky, sand).
@@ -678,17 +661,13 @@ function toggleInk() {
   render();
 }
 
-function setScenePicker(open) {
-  $('scenes').hidden = !open;
-  $('sceneToggle').setAttribute('aria-expanded', String(open));
-}
 
 /* ── Place sheet (manual location) ────────────────────────────────────── */
 
 let searchTimer = 0;
 let refine = null; // the suggested city just picked, while asking "where in it?"
 
-function openSheet() {
+function openSheet({ focus = false } = {}) {
   const off = awayOffset(state.shot);
   refine = null;
   $('sheet').hidden = false;
@@ -698,8 +677,11 @@ function openSheet() {
   $('sheetNote').hidden = off == null;
   $('sheetNote').textContent = off == null ? '' : `Taken in ${offsetLabel(off)}, not where you are now.`;
   renderResults([], { showRecent: true });
-  // With suggestions on screen, one tap is enough: don't pop the keyboard.
-  if (off == null) setTimeout(() => $('placeQuery').focus(), 50);
+  // Opened by Aera to ask: the suggestions are one tap, so no keyboard. Opened by you
+  // to change the place: straight to typing.
+  if (focus && off == null) setTimeout(() => $('placeQuery').focus(), 50);
+  // The town you're in may arrive a moment later: relabel "where you are now".
+  state.here?.then(() => { if (!$('sheet').hidden && !refine && !$('placeQuery').value) renderResults([], { showRecent: true }); });
 }
 
 // The last few places picked by search, kept on this device for one-tap reuse.
@@ -759,11 +741,17 @@ function finishPlace(shot, p) {
   recordPlace(p, shot.takenAt, p.name, shot.utcOffsetMin ?? (p.tz ? offsetIn(p.tz, shot.takenAt) : null));
 }
 
+// "Suwon · where you are now" once the town is known; before that, a plain label.
+function hereItem() {
+  if (!navigator.geolocation) return [];
+  return [{ name: hereName ?? 'Use my current location', detail: hereName ? 'Where you are now' : '', here: true }];
+}
+
 // Before typing: your recent places (and "here"). For a photo from another time zone:
 // recent places in that zone first, then the best-known cities there, "here" last.
 function defaultPlaces() {
   if (refine) return [{ name: `Just ${refine.name}`, detail: refine.detail ?? '', keep: true }];
-  const here = navigator.geolocation ? [{ name: 'Use my current location', detail: '', here: true }] : [];
+  const here = hereItem();
   const recent = recentPlaces().map((p) => ({ ...p, detail: p.detail ? `Recent · ${p.detail}` : 'Recent' }));
   const off = awayOffset(state.shot);
   if (off == null) return [...here, ...recent];
@@ -777,7 +765,7 @@ function defaultPlaces() {
 function renderResults(places, { showRecent = false } = {}) {
   const items = showRecent ? defaultPlaces()
     : refine ? [...nearby(places, refine), ...defaultPlaces()]
-    : [...(navigator.geolocation ? [{ name: 'Use my current location', detail: '', here: true }] : []), ...places];
+    : [...hereItem(), ...places];
   $('placeResults').replaceChildren(...items.map((p) => {
     const li = document.createElement('li');
     const b = document.createElement('button');
@@ -997,12 +985,11 @@ $('viewerSave').addEventListener('click', () => saveToDevice(state.viewer?.file)
 for (const id of ['download', 'viewerSave']) $(id).setAttribute('aria-label', IS_IOS ? 'Save to Photos' : 'Save to your gallery');
 $('viewerDelete').addEventListener('click', removeViewed);
 document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => history.back()));
-$('place').addEventListener('click', openSheet);
+$('place').addEventListener('click', () => openSheet({ focus: true }));
 $('inkToggle').addEventListener('click', toggleInk);
 $('selectBtn').addEventListener('click', () => setSelecting(!sel.on));
 $('selShare').addEventListener('click', shareSelected);
 $('selDelete').addEventListener('click', deleteSelected);
-$('sceneToggle').addEventListener('click', () => setScenePicker($('scenes').hidden));
 $('sheetClose').addEventListener('click', closeSheet);
 $('capture').addEventListener('change', onCapture);
 $('file').addEventListener('change', onFile);

@@ -79,15 +79,15 @@ export async function fetchSignals(lat, lon) {
   for (let x = Math.floor(gx - r); x <= Math.floor(gx + r); x++)
     for (let y = Math.floor(gy - r); y <= Math.floor(gy + r); y++) tiles.push([x, y]);
 
-  const [loaded, relief, cityKm] = await Promise.all([
+  const [loaded, relief, { cityKm, placeName }] = await Promise.all([
     Promise.all(tiles.map(([x, y]) => fetchTile(x, y).then((t) => [x, y, t]))),
     fetchRelief(lat, lon),
-    nearestCityKm(lat, lon),
+    nearestPlaces(lat, lon),
   ]);
 
   const s = {
     oceanM: Infinity, beachM: Infinity, inWood: false, inIceOrRock: false, inPark: false,
-    tall: 0, pois: 0, landuse: null, cityKm, ...relief,
+    tall: 0, pois: 0, landuse: null, cityKm, placeName, ...relief,
   };
   const seenPoi = new Set();
 
@@ -138,26 +138,35 @@ export async function fetchSignals(lat, lon) {
   return s;
 }
 
-// Distance (km) to the nearest city-class place label in the surrounding z10 tile.
-async function nearestCityKm(lat, lon) {
+// From the z10 place labels around the point: the distance (km) to the nearest city
+// (for the scene) and the name of the nearest city or town (shown as the place, e.g.
+// "Suwon", instead of a vague "here"). English or Latin-script names first.
+const NAME_KM = 25;
+const labelName = (p) => p['name:en'] || p.name_en || p['name:latin'] || p.name_int || p.name || null;
+
+async function nearestPlaces(lat, lon) {
   try {
     const [gx, gy] = toTile(lat, lon, CITY_Z);
     const tile = await fetchTile(Math.floor(gx), Math.floor(gy), CITY_Z);
     const layer = tile?.layers.place;
-    if (!layer) return null;
+    if (!layer) return { cityKm: null, placeName: null };
     const kmPerUnit = (EARTH * Math.cos((lat * Math.PI) / 180)) / 2 ** CITY_Z / 1000;
-    let best = Infinity;
+    let cityKm = Infinity, named = { km: Infinity, name: null };
     for (let i = 0; i < layer.length; i++) {
       const f = layer.feature(i);
-      if (f.properties.class !== 'city') continue;
+      const cls = f.properties.class;
+      if (cls !== 'city' && cls !== 'town') continue;
       const p = f.loadGeometry()[0][0];
       const dx = (Math.floor(gx) + p.x / f.extent - gx) * kmPerUnit;
       const dy = (Math.floor(gy) + p.y / f.extent - gy) * kmPerUnit;
-      best = Math.min(best, Math.hypot(dx, dy));
+      const km = Math.hypot(dx, dy);
+      if (cls === 'city') cityKm = Math.min(cityKm, km);
+      const name = labelName(f.properties);
+      if (name && km < named.km && km <= NAME_KM) named = { km, name };
     }
-    return best;
+    return { cityKm, placeName: named.name };
   } catch {
-    return null;
+    return { cityKm: null, placeName: null };
   }
 }
 
@@ -227,5 +236,5 @@ export function classifyScene(s) {
 
 export async function detectScene(lat, lon) {
   const signals = await fetchSignals(lat, lon);
-  return { scene: classifyScene(signals), signals };
+  return { scene: classifyScene(signals), place: signals.placeName ?? null, signals };
 }

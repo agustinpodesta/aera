@@ -133,10 +133,15 @@ All queried by coordinates (never city names): place names only find coordinates
 - Open-Meteo (in use as fallback): no key, no card; CAMS model, US AQI with proper EPA averaging; Europe ~11 km hourly, global ~45 km 3-hourly; history back to Aug 2022 (global); free = non-commercial only
 - OpenWeather Air Pollution: free key, no card; 60/min, 1M/month; hourly history from 27 Nov 2020; only a 1–5 index, so US AQI would be computed from concentrations; commercial terms unclear — not needed now
 - API Ninjas: free key, but no commercial use on the free tier, no history, AQI scale undocumented — skip
-- [x] Older photos get the air from the hour they were taken (per Agustín): > 2 h old and since Aug 2022 → Open-Meteo modeled reading for that hour, TIME = the photo's own local time, strip says "DATA OPEN-METEO (MODELED), FOR hh:mm", place line says "when taken". 1–2 h old, before Aug 2022, or no model data for that hour → the air now with TIME = now. Photos taken now keep IQAir
+- [x] ~~Older photos get the air from the hour they were taken (per Agustín): > 2 h old and since Aug 2022 → Open-Meteo modeled reading for that hour, TIME = the photo's own local time, strip says "DATA OPEN-METEO (MODELED), FOR hh:mm", place line says "when taken". 1–2 h old, before Aug 2022, or no model data for that hour → the air now with TIME = now. Photos taken now keep IQAir~~ — switched off after Agustín's test: Open-Meteo's model read 83 for yesterday in Suwon and 56 now vs IQAir's measured 31 (≈2× high). Older photos are back to IQAir's air now with TIME now (`PHOTO_TIME_AIR` flag)
 
 ## Home & credits
 - [x] Home background: 12 of Agustín's trip clips (media/home, 540×960, ~4 s, silent, ~470 KB each, 5.6 MB total; GPS/location metadata stripped from every file) crossfade in random order behind a top/bottom gradient; first still shows instantly, only the next clip preloads; pauses off the home screen and in background tabs; reduced motion or data saver → a still; blocked autoplay (e.g. iOS low power) → rotating stills
 - [x] Credits on home: "Air: IQAir · Open-Meteo (CAMS, CC BY 4.0) · Map © OpenStreetMap contributors" (Open-Meteo's free tier covers free, ad-free apps)
 - [x] Clip 09 (cherry-blossom road, readable car plates) dropped per Agustín — 11 clips now
+
+## Place & sticker clarity (Oct 2026, from Agustín's test)
+- [x] An older photo with no known place (no GPS, no trip/trail match) asks "Where was this taken?" before showing any air; first option is "<your town> · Where you are now" (one tap, no keyboard); the strip waits ("…") until a place is chosen. Photos from the last hour still use where you are, silently
+- [x] "Here" replaced by a real town name: /api/scene now returns `place` (nearest city/town label from the OpenFreeMap z10 tile, English/Latin names first): Suwon, San Isidro, Hallim, Seoul, Bariloche
+- [x] Sticker is always automatic: the "Sticker: … · change" picker is gone
 
