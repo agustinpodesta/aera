@@ -43,6 +43,7 @@ function show(screen) {
   for (const id of ['home', 'preview', 'gallery', 'viewer']) $(id).hidden = id !== screen;
   if (screen !== 'gallery' && sel.on) setSelecting(false);
   if (screen !== 'preview') closeSheet();
+  if (screen === 'preview') $('pickAgain').hidden = true;
   state.screen = screen;
 }
 
@@ -55,6 +56,11 @@ function notify(text) {
 // phone's back gesture walks back through them.
 window.addEventListener('popstate', () => {
   const to = history.state?.aera;
+  if (state.screen === 'preview' && to !== 'preview') {
+    // Back with the place sheet open closes the sheet, not the photo.
+    if (!$('sheet').hidden) { closeSheet(); history.pushState({ aera: 'preview' }, ''); return; }
+    if (state.shot?.pending) discardPending();
+  }
   if (to === 'gallery') return openGallery({ push: false });
   if (to === 'viewer') return openViewer(history.state.id, { push: false });
   if (to === 'preview' && state.shot) return show('preview');
@@ -76,6 +82,7 @@ function openCamera() {
 // the gallery and the Files picker alike), so older photos usually need their place set.
 function pickPhoto() {
   notify('');
+  $('pickAgain').hidden = true;
   $('file').value = '';
   $('file').click();
 }
@@ -131,7 +138,7 @@ function awayOffset(shot) {
 }
 
 async function importFile(f) {
-  const shot = await openFile(f, { live: true });
+  const shot = await openFile(f, { live: true, pending: true });
   if (!shot) return;
   const [{ gps }, taken] = await Promise.all([photoLocation(f), photoTakenAt(f)]);
   if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
@@ -165,7 +172,9 @@ function loadImage(blob) {
   });
 }
 
-async function openFile(f, { live }) {
+// pending: a picked or shared photo stays out of the Aera gallery until you share or
+// save it; back discards it. Camera shots are kept right away, like any camera.
+async function openFile(f, { live, pending = false }) {
   let img;
   try {
     img = await loadImage(f);
@@ -178,7 +187,7 @@ async function openFile(f, { live }) {
   const shot = {
     id: newId(), img, original: f, src: workingCopy(img, scale), scale, focus: { x: 0.5, y: 0.5 }, strip: { ...STRIP_HOME },
     takenAt: new Date(live ? Date.now() : f.lastModified || Date.now()),
-    live, gps: null, air: null, detected: null, loading: true,
+    live, pending, gps: null, air: null, detected: null, loading: true,
   };
   markStarted();
   openPreview(shot);
@@ -286,11 +295,13 @@ function openPreview(shot) {
   state.scene = shot.sceneChoice ?? 'auto';
   setScenePicker(false);
   // Reopened from the gallery: back returns to the gallery, and Retake becomes Delete.
-  // Imported from the gallery: replace that entry, so back from the preview goes home.
+  // A picked photo: back returns to where you picked it (and discards it); Retake
+  // becomes Another. A camera shot from the gallery screen replaces that entry.
   if (shot.fromGallery) history.pushState({ aera: 'preview' }, '');
-  else if (history.state?.aera === 'gallery') history.replaceState({ aera: 'preview' }, '');
-  else if (history.state?.aera !== 'preview') history.pushState({ aera: 'preview' }, '');
-  $('retake').textContent = shot.fromGallery ? 'Delete' : 'Retake';
+  else if (history.state?.aera === 'preview') { /* already there: a new pick replaces the old one */ }
+  else if (history.state?.aera === 'gallery' && !shot.pending) history.replaceState({ aera: 'preview' }, '');
+  else history.pushState({ aera: 'preview' }, '');
+  $('retake').textContent = shot.fromGallery ? 'Delete' : shot.pending ? 'Another' : 'Retake';
   renderInk();
   show('preview');
   renderPlace();
@@ -331,18 +342,41 @@ function prepareFile() {
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
     state.file = new File([blob], `aera-${stamp}.jpg`, { type: 'image/jpeg' });
     $('save').disabled = false;
-    // Every finished photo lands in the on-device gallery; later edits update the same entry.
-    // The original goes in once; the edit state rides along every time, so it can be reopened.
-    const original = shot.originalSaved ? null : shot.original;
-    savePhoto({
-      id: shot.id, createdAt: (shot.savedAt ??= new Date()), aqi: shot.air?.aqi ?? null, scene: effectiveScene(),
-      canvas, blob, name: state.file.name, edit: editState(shot), original,
-    }).then(() => { if (original) shot.originalSaved = true; updateGalleryButton(); }).catch(() => {});
+    if (!shot.pending) keepShot(shot, blob);
     const share = canShareFile(state.file);
     $('save').textContent = share ? 'Share' : 'Download';
     $('download').hidden = !share; // with a share sheet, keep a one-tap "save to my photos" too
     showPreviewImage(blob);
   }, 'image/jpeg', 0.92);
+}
+
+// Into the on-device gallery; later edits update the same entry. The original goes in
+// once; the edit state rides along every time, so the photo can be reopened and edited.
+function keepShot(shot, blob) {
+  const original = shot.originalSaved ? null : shot.original;
+  return savePhoto({
+    id: shot.id, createdAt: (shot.savedAt ??= new Date()), aqi: shot.air?.aqi ?? null, scene: effectiveScene(),
+    canvas, blob, name: state.file?.name ?? 'aera.jpg', edit: editState(shot), original,
+  }).then(() => { if (original) shot.originalSaved = true; updateGalleryButton(); }).catch(() => {});
+}
+
+// Sharing or saving a picked photo is the sign you want it: keep it from then on.
+function keepPending() {
+  const shot = state.shot;
+  if (!shot?.pending || !state.file) return;
+  shot.pending = false;
+  $('retake').textContent = 'Retake';
+  keepShot(shot, state.file);
+}
+
+// Back from a picked photo you didn't share or save: it's gone, and choosing another
+// is one tap away (browsers only open the picker from a tap, not from a back gesture).
+function discardPending() {
+  state.shot = null;
+  state.file = null;
+  hidePreviewImage();
+  $('pickAgain').hidden = false;
+  if (navigator.userActivation?.isActive) pickPhoto();
 }
 
 // Show the finished JPEG as a real <img> over the canvas, so a long-press offers
@@ -625,10 +659,14 @@ function setScenePicker(open) {
 /* ── Place sheet (manual location) ────────────────────────────────────── */
 
 let searchTimer = 0;
+let refine = null; // the suggested city just picked, while asking "where in it?"
 
 function openSheet() {
   const off = awayOffset(state.shot);
+  refine = null;
   $('sheet').hidden = false;
+  $('sheetTitle').textContent = 'Where was this taken?';
+  $('placeQuery').placeholder = 'Search a city';
   $('placeQuery').value = '';
   $('sheetNote').hidden = off == null;
   $('sheetNote').textContent = off == null ? '' : `Taken in ${offsetLabel(off)}, not where you are now.`;
@@ -652,11 +690,52 @@ function rememberPlace({ name, detail, lat, lon, tz }) {
 
 function closeSheet() {
   $('sheet').hidden = true;
+  // Closed while asking "where in <city>?": the city it is.
+  if (refine) {
+    const city = refine;
+    refine = null;
+    if (state.shot) finishPlace(state.shot, city);
+  }
+}
+
+// After a suggested city, ask where exactly (optional): a neighbourhood or nearby town
+// gives a closer reading. The city's reading loads meanwhile.
+
+function openRefine(city) {
+  refine = city;
+  $('sheet').hidden = false;
+  $('sheetTitle').textContent = `Where in ${city.name}?`;
+  $('sheetNote').hidden = false;
+  $('sheetNote').textContent = 'A neighbourhood or nearby town gives a closer reading. Optional.';
+  $('placeQuery').value = '';
+  $('placeQuery').placeholder = `Search near ${city.name}`;
+  renderResults([], { showRecent: true });
+  setTimeout(() => $('placeQuery').focus(), 50);
+}
+
+const KM_PER_DEG = 111.2;
+function kmBetween(a, b) {
+  const x = (b.lon - a.lon) * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180);
+  return Math.hypot(x, b.lat - a.lat) * KM_PER_DEG;
+}
+
+// Search results nearest the city first; far-away namesakes only when nothing is close.
+function nearby(places, city) {
+  const ranked = places.map((p) => ({ ...p, km: kmBetween(city, p) })).sort((a, b) => a.km - b.km);
+  const close = ranked.filter((p) => p.km <= 200);
+  return (close.length ? close : ranked).map((p) => ({ ...p, detail: [p.detail, `${Math.round(p.km)} km`].filter(Boolean).join(' · ') }));
+}
+
+// Remember the final place: recents, and the trail so the trip's other photos follow.
+function finishPlace(shot, p) {
+  rememberPlace(p);
+  recordPlace(p, shot.takenAt, p.name, shot.utcOffsetMin ?? (p.tz ? offsetIn(p.tz, shot.takenAt) : null));
 }
 
 // Before typing: your recent places (and "here"). For a photo from another time zone:
 // recent places in that zone first, then the best-known cities there, "here" last.
 function defaultPlaces() {
+  if (refine) return [{ name: `Just ${refine.name}`, detail: refine.detail ?? '', keep: true }];
   const here = navigator.geolocation ? [{ name: 'Use my current location', detail: '', here: true }] : [];
   const recent = recentPlaces().map((p) => ({ ...p, detail: p.detail ? `Recent · ${p.detail}` : 'Recent' }));
   const off = awayOffset(state.shot);
@@ -664,11 +743,13 @@ function defaultPlaces() {
   const at = state.shot.takenAt;
   const fits = recent.filter((p) => p.tz && offsetIn(p.tz, at) === off);
   const taken = new Set(fits.map((p) => p.name));
-  return [...fits, ...citiesAtOffset(off, at).filter((c) => !taken.has(c.name)), ...here];
+  const cities = citiesAtOffset(off, at).filter((c) => !taken.has(c.name)).map((c) => ({ ...c, city: true }));
+  return [...fits, ...cities, ...here];
 }
 
 function renderResults(places, { showRecent = false } = {}) {
   const items = showRecent ? defaultPlaces()
+    : refine ? [...nearby(places, refine), ...defaultPlaces()]
     : [...(navigator.geolocation ? [{ name: 'Use my current location', detail: '', here: true }] : []), ...places];
   $('placeResults').replaceChildren(...items.map((p) => {
     const li = document.createElement('li');
@@ -684,15 +765,17 @@ function renderResults(places, { showRecent = false } = {}) {
 }
 
 async function choosePlace(p) {
-  closeSheet();
   const shot = state.shot;
+  const city = refine;
+  refine = null; // this choice settles it
+  closeSheet();
+  if (p.keep) return finishPlace(shot, city);
   if (!p.here) {
-    rememberPlace(p);
-    // Other photos from that trip (same time zone, within a few days) land here too.
-    recordPlace(p, shot.takenAt, p.name, shot.utcOffsetMin ?? (p.tz ? offsetIn(p.tz, shot.takenAt) : null));
     shot.placeName = p.name;
     loadPlace(shot, { lat: p.lat, lon: p.lon }, {}, 'search');
-    return;
+    if (p.city && !city) return openRefine(p); // a suggested city: ask where exactly
+    // Other photos from that trip (same time zone, within a few days) land here too.
+    return finishPlace(shot, p);
   }
   shot.placeName = null;
   shot.loading = true;
@@ -712,7 +795,7 @@ $('placeQuery').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
   const q = e.target.value;
   searchTimer = setTimeout(async () => {
-    const places = await searchPlaces(q);
+    const places = await searchPlaces(q, refine ? 30 : 6);
     if ($('placeQuery').value === q) renderResults(places, { showRecent: !q.trim() });
   }, 250);
 });
@@ -877,9 +960,10 @@ async function updateGalleryButton() {
 /* ── Wiring ───────────────────────────────────────────────────────────── */
 
 $('shutter').addEventListener('click', openCamera);
-$('retake').addEventListener('click', () => (state.shot?.fromGallery ? deleteEdited() : openCamera()));
-$('save').addEventListener('click', () => shareFile(state.file));
-$('download').addEventListener('click', () => saveToDevice(state.file));
+$('retake').addEventListener('click', () => (state.shot?.fromGallery ? deleteEdited() : state.shot?.pending ? pickPhoto() : openCamera()));
+$('save').addEventListener('click', () => { keepPending(); shareFile(state.file); });
+$('download').addEventListener('click', () => { keepPending(); saveToDevice(state.file); });
+$('pickAgain').addEventListener('click', pickPhoto);
 $('galleryBtn').addEventListener('click', () => openGallery());
 $('viewerShare').addEventListener('click', () => shareFile(state.viewer?.file));
 $('viewerSave').addEventListener('click', () => saveToDevice(state.viewer?.file));

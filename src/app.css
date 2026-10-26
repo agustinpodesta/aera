@@ -205,6 +205,16 @@ body {
   background: var(--paper); border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, .4);
 }
 
+/* Back from a picked photo: one tap to choose another (a back gesture can't open the picker) */
+.pick-again {
+  position: fixed; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 15;
+  width: fit-content; margin: 0 auto; min-height: 48px; padding: 0 22px;
+  font: 500 14px var(--mono); color: var(--night);
+  background: var(--paper); border: 0; border-radius: 999px; box-shadow: 0 8px 30px rgba(0, 0, 0, .45);
+  cursor: pointer;
+}
+.pick-again::before { content: "↺ "; }
+
 /* ── Drag to frame ── */
 .frame .stack.draggable { touch-action: none; cursor: grab; }
 .frame .stack.dragging { cursor: grabbing; }

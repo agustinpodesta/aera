@@ -98,11 +98,11 @@ export async function fetchAir({ lat, lon }, at = null) {
 }
 
 /** City search for photos without a location (Open-Meteo geocoding, keyless, CORS-enabled). */
-export async function searchPlaces(query) {
+export async function searchPlaces(query, count = 6) {
   const q = query.trim();
   if (q.length < 2) return [];
   try {
-    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en`);
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=${count}&language=en`);
     const { results = [] } = await res.json();
     return results.map((r) => ({
       name: r.name,
