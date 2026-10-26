@@ -133,5 +133,5 @@ All queried by coordinates (never city names): place names only find coordinates
 - Open-Meteo (in use as fallback): no key, no card; CAMS model, US AQI with proper EPA averaging; Europe ~11 km hourly, global ~45 km 3-hourly; history back to Aug 2022 (global); free = non-commercial only
 - OpenWeather Air Pollution: free key, no card; 60/min, 1M/month; hourly history from 27 Nov 2020; only a 1–5 index, so US AQI would be computed from concentrations; commercial terms unclear — not needed now
 - API Ninjas: free key, but no commercial use on the free tier, no history, AQI scale undocumented — skip
-- [ ] Decide: real air at the photo's time for older photos via Open-Meteo history (free, already coded as `openMeteoHour`, coarser model) vs keep "the air now"
+- [x] Older photos get the air from the hour they were taken (per Agustín): > 2 h old and since Aug 2022 → Open-Meteo modeled reading for that hour, TIME = the photo's own local time, strip says "DATA OPEN-METEO (MODELED), FOR hh:mm", place line says "when taken". 1–2 h old, before Aug 2022, or no model data for that hour → the air now with TIME = now. Photos taken now keep IQAir
 

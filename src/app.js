@@ -13,7 +13,11 @@ import { citiesAtOffset, offsetIn, offsetLabel } from './cities.js';
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
 const MAX_ZOOM = 4;         // pinch-zoom limit for the photo
-const RECENT_MS = 60 * 60e3; // older photos get TIME = now, since their reading is the air now
+const RECENT_MS = 60 * 60e3; // older than this, a photo counts as "older" (place guessing, TIME)
+// Photos older than this get the air from the hour they were taken (Open-Meteo's model,
+// with the photo's own TIME), if the model's archive reaches back that far.
+const HISTORY_AFTER_MS = 2 * 3600e3; // matches the server's PAST_AFTER_MS
+const HISTORY_FROM = Date.UTC(2022, 7, 1); // global model archive starts August 2022
 
 // Websites can't write to the Photos library directly. On iOS the only route is the
 // share sheet's "Save Image"; on Android a download lands in the phone's gallery.
@@ -133,8 +137,20 @@ function onFile(e) {
 // photo was taken in another time zone), else null. Only for older photos.
 function awayOffset(shot) {
   const off = shot?.utcOffsetMin;
-  if (!shot?.reportAt || !Number.isFinite(off)) return null;
+  if (!shot?.older || !Number.isFinite(off)) return null;
   return off === -shot.takenAt.getTimezoneOffset() ? null : off;
+}
+
+// When was the air on the strip? A photo from the last hour: now. Older than 2 h (and
+// since Aug 2022): the hour it was taken, at the photo's own TIME. In between, or older
+// than the archive: the air now, and TIME becomes now so it never claims the past.
+function datePhoto(shot) {
+  const t = shot.takenAt.getTime(), age = Date.now() - t;
+  shot.older = age > RECENT_MS;
+  shot.live = true;
+  shot.reportAt = undefined;
+  if (age > HISTORY_AFTER_MS && t >= HISTORY_FROM) shot.live = false;
+  else if (shot.older) shot.reportAt = new Date();
 }
 
 async function importFile(f) {
@@ -142,12 +158,12 @@ async function importFile(f) {
   if (!shot) return;
   const [{ gps }, taken] = await Promise.all([photoLocation(f), photoTakenAt(f)]);
   if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
-  if (Date.now() - shot.takenAt.getTime() > RECENT_MS) shot.reportAt = new Date();
+  datePhoto(shot);
   if (gps) {
     recordPlace(gps, shot.takenAt, null, shot.utcOffsetMin);
     return loadPlace(shot, gps, {}, 'photo');
   }
-  const seen = shot.reportAt ? placeAt(shot.takenAt, shot.utcOffsetMin) : null;
+  const seen = shot.older ? placeAt(shot.takenAt, shot.utcOffsetMin) : null;
   if (seen) {
     shot.placeName = seen.name ?? undefined;
     return loadPlace(shot, seen.gps, {}, 'trail');
@@ -199,7 +215,7 @@ async function openFile(f, { live, pending = false }) {
 function editState(shot) {
   return {
     focus: shot.focus, zoom: shot.zoom ?? 1, ink: shot.ink ?? 'light', strip: shot.strip, sceneChoice: state.scene,
-    takenAt: +shot.takenAt, utcOffsetMin: shot.utcOffsetMin ?? null, reportAt: shot.reportAt ? +shot.reportAt : null,
+    takenAt: +shot.takenAt, utcOffsetMin: shot.utcOffsetMin ?? null, reportAt: shot.reportAt ? +shot.reportAt : null, older: !!shot.older,
     live: shot.live, gps: shot.gps, gpsSource: shot.gpsSource ?? null, placeName: shot.placeName ?? null,
     air: shot.air, detected: shot.detected,
   };
@@ -217,6 +233,7 @@ async function openEditor(id) {
     id, img, original, originalSaved: true, src: workingCopy(img, scale), scale, fromGallery: true,
     focus: e.focus, zoom: e.zoom ?? 1, ink: e.ink ?? 'light', strip: e.strip, sceneChoice: e.sceneChoice,
     takenAt: new Date(e.takenAt), utcOffsetMin: e.utcOffsetMin, reportAt: e.reportAt ? new Date(e.reportAt) : undefined,
+    older: e.older ?? Boolean(e.reportAt),
     live: e.live, gps: e.gps, gpsSource: e.gpsSource, placeName: e.placeName ?? undefined,
     air: e.air, detected: e.detected, loading: false, savedAt: new Date(meta.createdAt),
   });
@@ -267,12 +284,18 @@ async function loadPlace(shot, gps, pre = {}, source = null) {
   if (!gps) return; // no location: the preview asks for one
   const at = shot.live ? null : shot.takenAt;
   let [air, scene] = await Promise.all([
-    pre.air ?? fetchAir(gps, at),
+    (shot.live && pre.air) || fetchAir(gps, at), // a prefetched reading is the air now: live shots only
     pre.scene ?? fetchScene(gps).then((b) => b.scene ?? null),
   ]);
   // One retry before showing "no reading": the air services occasionally rate-limit or time out.
   if (!air && shot.gps === gps) air = await new Promise((r) => setTimeout(r, 800)).then(() => fetchAir(gps, at));
   if (shot.gps !== gps) return; // a different place was picked meanwhile
+  // No model data for that hour (a gap): the air now instead, and TIME says now.
+  if (!shot.live && !Number.isFinite(air?.aqi)) {
+    const now = await fetchAir(gps);
+    if (shot.gps !== gps) return;
+    if (Number.isFinite(now?.aqi)) { air = now; shot.live = true; shot.reportAt = new Date(); }
+  }
   Object.assign(shot, { air, detected: scene, loading: false });
   refresh(shot);
 }
@@ -600,7 +623,7 @@ function renderPlace() {
   const shot = state.shot, el = $('place');
   // An older photo placed by a guess (where you are now, or the trail): keep it quiet,
   // but make the change one tap. A real boolean: toggle(x, undefined) flips the class.
-  const guessed = Boolean(shot.reportAt) && (shot.gpsSource === 'here' || shot.gpsSource === 'trail');
+  const guessed = Boolean(shot.older) && (shot.gpsSource === 'here' || shot.gpsSource === 'trail');
   el.classList.toggle('ask', !shot.gps && !shot.loading);
   if (shot.loading) { el.textContent = 'Reading the air…'; return; }
   if (!shot.gps) {
@@ -611,8 +634,8 @@ function renderPlace() {
   const air = shot.air;
   const where = shot.placeName ?? air?.place ?? (shot.gpsSource === 'photo' ? 'Photo location' : 'Here');
   const what = !air ? 'air data unavailable'
-    : air.aqi == null ? 'no reading here right now'
-    : air.scope === 'modeled' ? `${air.source}, modeled` : air.source;
+    : air.aqi == null ? (air.historical ? 'no reading for that time' : 'no reading here right now')
+    : (air.scope === 'modeled' ? `${air.source}, modeled` : air.source) + (air.historical ? ', when taken' : '');
   el.textContent = guessed ? `${where} · ${what} · change` : `${where} · ${what}`;
 }
 
