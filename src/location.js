@@ -109,6 +109,7 @@ export async function searchPlaces(query) {
       detail: [r.admin1, r.country].filter((x) => x && x !== r.name).join(', '),
       lat: r.latitude,
       lon: r.longitude,
+      tz: r.timezone, // IANA zone: lets a recent place be suggested for photos from that zone
     }));
   } catch {
     return [];

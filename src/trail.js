@@ -1,7 +1,9 @@
 // Where Aera has seen you, kept only on this device (localStorage, never uploaded).
 // Android hides the GPS of every photo a website picks, so an imported photo borrows
 // the place you were at around the time it was taken. Points are rounded to ~1 km and
-// merged into stays: { from, to, lat, lon, name? }, one per place you spent time at.
+// merged into stays: { from, to, lat, lon, off?, name? }, one per place you spent time at
+// (off = the UTC offset there, in minutes). A place you picked covers that trip: any
+// photo from the same time zone within a few days borrows it.
 
 import { validCoords } from './location.js';
 
@@ -11,6 +13,7 @@ const KEEP_MS = 365 * 86400e3;
 const SAME_PLACE_KM = 3;      // closer than this is the same stay
 const MERGE_GAP_MS = 6 * 3600e3;
 const MATCH_MS = 3 * 3600e3;  // how far from a stay a photo may be and still borrow it
+const TRIP_MS = 4 * 86400e3;  // …or, for a place you picked, in the same time zone
 
 function load() {
   try { return JSON.parse(localStorage.getItem(KEY)) ?? []; } catch { return []; }
@@ -30,8 +33,8 @@ function km(a, b) {
 // 0 inside the stay, else the time to its nearest end.
 const gap = (s, t) => (t < s.from ? s.from - t : t > s.to ? t - s.to : 0);
 
-/** Note that you were at `gps` at time `at`. `name` comes from a place you picked. */
-export function recordPlace(gps, at = Date.now(), name = null) {
+/** Note that you were at `gps` at time `at` (UTC offset `off`). `name` = a place you picked. */
+export function recordPlace(gps, at = Date.now(), name = null, off = null) {
   const c = validCoords(gps?.lat, gps?.lon);
   const t = +at;
   if (!c || !Number.isFinite(t)) return;
@@ -43,21 +46,26 @@ export function recordPlace(gps, at = Date.now(), name = null) {
     near.from = Math.min(near.from, t);
     near.to = Math.max(near.to, t);
     if (name) near.name = name;
+    if (Number.isFinite(off)) near.off = off;
   } else {
-    stays.push({ from: t, to: t, ...p, ...(name ? { name } : {}) });
+    stays.push({ from: t, to: t, ...p, ...(Number.isFinite(off) ? { off } : {}), ...(name ? { name } : {}) });
   }
   stays.sort((a, b) => a.from - b.from);
   save(stays.slice(-MAX_STAYS));
 }
 
-/** @returns {{gps: {lat, lon}, name: string|null}|null} where you were around `at` */
-export function placeAt(at) {
+/** @returns {{gps: {lat, lon}, name: string|null}|null} where you were around `at` (UTC offset `off`) */
+export function placeAt(at, off = null) {
   const t = +at;
   if (!Number.isFinite(t)) return null;
+  const known = Number.isFinite(off);
   let best = null;
   for (const s of load()) {
+    const sameZone = known && Number.isFinite(s.off) && s.off === off;
+    if (known && Number.isFinite(s.off) && !sameZone) continue; // another time zone: not there
     const d = gap(s, t);
-    if (d <= MATCH_MS && (!best || d < best.d)) best = { d, s };
+    const reach = s.name && sameZone ? TRIP_MS : MATCH_MS;
+    if (d <= reach && (!best || d < best.d)) best = { d, s };
   }
   return best ? { gps: { lat: best.s.lat, lon: best.s.lon }, name: best.s.name ?? null } : null;
 }

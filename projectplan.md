@@ -80,7 +80,10 @@
 - [x] Lab results on the Pixel (Oct 2026): gallery picker, JPEG-only picker, any-file picker and Google Photos → Share all strip GPS; **Files by Google → Share → Aera keeps it**
 - [x] "Share → Aera" now opens the photo straight in the editor (first photo if several), with its own location
 - [x] Lab round 2 on the Pixel (Chrome 155): camera folder via showDirectoryPicker works (1436 photos, 11 s to list, permission re-asked after reload) but GPS is blanked; any-file picker browsed to DCIM also blanked. Rule: whenever Chrome reads the file itself, Android zeroes the GPS
-- [ ] Lab round 3: pick through the Files by Google app from the any-file picker's ☰ menu; launch links for Files by Google
+- [x] Lab round 3: picking via the any-file picker still blanked; "Open Files by Google" links only reach the Play Store (no browser entry). Conclusion: on Android only Files by Google → Share → Aera keeps GPS; the gallery button stays the normal images-only picker
+- [x] Time-zone check (per Agustín, after a Buenos Aires photo got Suwon's air): photos keep their UTC offset even when Android hides GPS. An older photo from another time zone never gets "here" — the place sheet opens without the keyboard, listing recent places in that zone first, then the best-known cities there (`src/cities.js`, ~170 cities, DST-aware via Intl), "here" last
+- [x] A picked place covers the trip: other photos from the same time zone within 4 days borrow it (trail stays now store the UTC offset; stays from other time zones never match)
+- [ ] Remove `/lab.html` from the live site once testing is done
 - [ ] Real auto-location fallback if sharing also strips: thin Android shell (TWA + small native picker using the new photo-picker location option) — Play Store closed test needs 12 testers × 14 days for new personal accounts
 - [x] Pinch to resize the strip (0.5×–1.77×, grows around its centre, follows the fingers), like an Instagram sticker; edge limits loosened 80% per Agustín (50 px top/bottom, 8 px sides)
 - [x] Movable strip: drag it anywhere in the preview (photo reframes when dragging elsewhere); clamped to IG's safe area (y 250–1670, 40 px sides); the darkening band follows the strip. (Strava's IG sticker is movable via the native Share-to-Stories sticker layer, which web apps can't use.)

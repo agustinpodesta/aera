@@ -8,6 +8,7 @@ import { SCENES } from './scenes.js';
 import { photoGps, photoLocation, photoTakenAt, fetchScene, fetchAir, locateMe, searchPlaces } from './location.js';
 import { savePhoto, listPhotos, getPhoto, getEditable, deletePhoto } from './gallery.js';
 import { recordPlace, placeAt } from './trail.js';
+import { citiesAtOffset, offsetIn, offsetLabel } from './cities.js';
 
 const HERE_TTL = 15 * 60e3; // re-locate if the last fix is older than this
 const MAX_SCALE = 2;        // export up to 2160×3840 (8 MP) when the photo has the detail for it
@@ -82,7 +83,7 @@ function pickPhoto() {
 // Locate and prefetch air + scene, so the preview is ready when the photo arrives.
 // Reuses a fresh fix; retries when the last attempt failed or went stale.
 function locateHere(force = false) {
-  const fresh = () => locateMe().then((gps) => (gps && recordPlace(gps), {
+  const fresh = () => locateMe().then((gps) => (gps && recordPlace(gps, Date.now(), null, -new Date().getTimezoneOffset()), {
     gps,
     at: Date.now(),
     air: gps ? fetchAir(gps) : null,
@@ -112,12 +113,21 @@ async function onCapture(e) {
 // there *now* (no reliable historical source). For an old photo the strip's TIME
 // becomes now too, so the report never claims to be from the day the photo was taken.
 // Android hides the GPS of picked photos from every website, so without it: a photo
-// taken just now → where you are; an older one → where Aera saw you around that time
-// (the on-device trail); else where you are. Never a question: the place line under
-// the photo is one tap away when the guess is wrong.
+// taken just now → where you are; an older one → where Aera saw you around that time,
+// or a place you picked for that trip (the on-device trail); else where you are — unless
+// the photo's time zone shows it was taken somewhere else. Then "here" would be wrong,
+// so the likely places for that time zone are offered as one tap instead.
 function onFile(e) {
   const f = e.target.files?.[0];
   if (f) importFile(f);
+}
+
+// The photo's UTC offset when it differs from this phone's offset on that date (the
+// photo was taken in another time zone), else null. Only for older photos.
+function awayOffset(shot) {
+  const off = shot?.utcOffsetMin;
+  if (!shot?.reportAt || !Number.isFinite(off)) return null;
+  return off === -shot.takenAt.getTimezoneOffset() ? null : off;
 }
 
 async function importFile(f) {
@@ -127,13 +137,18 @@ async function importFile(f) {
   if (taken) { shot.takenAt = taken.at; shot.utcOffsetMin = taken.utcOffsetMin; }
   if (Date.now() - shot.takenAt.getTime() > RECENT_MS) shot.reportAt = new Date();
   if (gps) {
-    recordPlace(gps, shot.takenAt);
+    recordPlace(gps, shot.takenAt, null, shot.utcOffsetMin);
     return loadPlace(shot, gps, {}, 'photo');
   }
-  const seen = shot.reportAt ? placeAt(shot.takenAt) : null;
+  const seen = shot.reportAt ? placeAt(shot.takenAt, shot.utcOffsetMin) : null;
   if (seen) {
     shot.placeName = seen.name ?? undefined;
     return loadPlace(shot, seen.gps, {}, 'trail');
+  }
+  if (awayOffset(shot) != null) {
+    loadPlace(shot, null);
+    if (state.shot === shot && state.screen === 'preview') openSheet();
+    return;
   }
   const here = await locateHere();
   loadPlace(shot, here.gps, here, here.gps ? 'here' : null);
@@ -554,7 +569,11 @@ function renderPlace() {
   const guessed = Boolean(shot.reportAt) && (shot.gpsSource === 'here' || shot.gpsSource === 'trail');
   el.classList.toggle('ask', !shot.gps && !shot.loading);
   if (shot.loading) { el.textContent = 'Reading the air…'; return; }
-  if (!shot.gps) { el.textContent = 'Add where this was taken'; return; }
+  if (!shot.gps) {
+    const off = awayOffset(shot);
+    el.textContent = off != null ? `Taken in ${offsetLabel(off)} · pick the place` : 'Add where this was taken';
+    return;
+  }
   const air = shot.air;
   const where = shot.placeName ?? air?.place ?? (shot.gpsSource === 'photo' ? 'Photo location' : 'Here');
   const what = !air ? 'air data unavailable'
@@ -608,10 +627,14 @@ function setScenePicker(open) {
 let searchTimer = 0;
 
 function openSheet() {
+  const off = awayOffset(state.shot);
   $('sheet').hidden = false;
   $('placeQuery').value = '';
+  $('sheetNote').hidden = off == null;
+  $('sheetNote').textContent = off == null ? '' : `Taken in ${offsetLabel(off)}, not where you are now.`;
   renderResults([], { showRecent: true });
-  setTimeout(() => $('placeQuery').focus(), 50);
+  // With suggestions on screen, one tap is enough: don't pop the keyboard.
+  if (off == null) setTimeout(() => $('placeQuery').focus(), 50);
 }
 
 // The last few places picked by search, kept on this device for one-tap reuse.
@@ -621,9 +644,9 @@ function recentPlaces() {
   try { return JSON.parse(localStorage.getItem(RECENT_PLACES_KEY)) ?? []; } catch { return []; }
 }
 
-function rememberPlace({ name, detail, lat, lon }) {
+function rememberPlace({ name, detail, lat, lon, tz }) {
   const clean = (d) => String(d ?? '').replace(/^Recent( · )?/, '');
-  const list = [{ name, detail: clean(detail), lat, lon }, ...recentPlaces().filter((p) => p.name !== name || p.lat !== lat)];
+  const list = [{ name, detail: clean(detail), lat, lon, ...(tz ? { tz } : {}) }, ...recentPlaces().filter((p) => p.name !== name || p.lat !== lat)];
   try { localStorage.setItem(RECENT_PLACES_KEY, JSON.stringify(list.slice(0, 5))); } catch { /* storage blocked */ }
 }
 
@@ -631,11 +654,22 @@ function closeSheet() {
   $('sheet').hidden = true;
 }
 
+// Before typing: your recent places (and "here"). For a photo from another time zone:
+// recent places in that zone first, then the best-known cities there, "here" last.
+function defaultPlaces() {
+  const here = navigator.geolocation ? [{ name: 'Use my current location', detail: '', here: true }] : [];
+  const recent = recentPlaces().map((p) => ({ ...p, detail: p.detail ? `Recent · ${p.detail}` : 'Recent' }));
+  const off = awayOffset(state.shot);
+  if (off == null) return [...here, ...recent];
+  const at = state.shot.takenAt;
+  const fits = recent.filter((p) => p.tz && offsetIn(p.tz, at) === off);
+  const taken = new Set(fits.map((p) => p.name));
+  return [...fits, ...citiesAtOffset(off, at).filter((c) => !taken.has(c.name)), ...here];
+}
+
 function renderResults(places, { showRecent = false } = {}) {
-  const items = [];
-  if (navigator.geolocation) items.push({ name: 'Use my current location', detail: '', here: true });
-  if (showRecent) items.push(...recentPlaces().map((p) => ({ ...p, detail: p.detail ? `Recent · ${p.detail}` : 'Recent' })));
-  items.push(...places);
+  const items = showRecent ? defaultPlaces()
+    : [...(navigator.geolocation ? [{ name: 'Use my current location', detail: '', here: true }] : []), ...places];
   $('placeResults').replaceChildren(...items.map((p) => {
     const li = document.createElement('li');
     const b = document.createElement('button');
@@ -654,7 +688,8 @@ async function choosePlace(p) {
   const shot = state.shot;
   if (!p.here) {
     rememberPlace(p);
-    recordPlace(p, shot.takenAt, p.name); // other photos from that trip land here too
+    // Other photos from that trip (same time zone, within a few days) land here too.
+    recordPlace(p, shot.takenAt, p.name, shot.utcOffsetMin ?? (p.tz ? offsetIn(p.tz, shot.takenAt) : null));
     shot.placeName = p.name;
     loadPlace(shot, { lat: p.lat, lon: p.lon }, {}, 'search');
     return;
@@ -669,7 +704,7 @@ async function choosePlace(p) {
     $('place').textContent = 'Location is off. Search a city instead.';
     return;
   }
-  recordPlace(here.gps, shot.takenAt); // you were here when it was taken
+  recordPlace(here.gps, shot.takenAt, null, shot.utcOffsetMin); // you were here when it was taken
   loadPlace(shot, here.gps, here, 'chosen-here');
 }
 
