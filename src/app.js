@@ -445,6 +445,29 @@ function toLayout(e) {
 
 const pointers = new Map(); // live touches on the preview: id → {x, y}
 
+// Instagram-style centring: while the strip moves, its centre clicks onto the photo's
+// vertical and/or horizontal middle when it passes close, with a guide line and a tiny
+// buzz (Android). Moving the finger on past the pull releases it.
+const SNAP_CSS = 12; // pull distance in screen pixels
+const snapped = { x: false, y: false };
+
+function snapStrip(cx, cy, layoutPerCss) {
+  const tol = SNAP_CSS * layoutPerCss;
+  const x = Math.abs(cx - W / 2) < tol, y = Math.abs(cy - H / 2) < tol;
+  if ((x && !snapped.x) || (y && !snapped.y)) navigator.vibrate?.(8);
+  snapped.x = x;
+  snapped.y = y;
+  $('guideV').hidden = !x;
+  $('guideH').hidden = !y;
+  return { cx: x ? W / 2 : cx, cy: y ? H / 2 : cy };
+}
+
+function hideGuides() {
+  snapped.x = snapped.y = false;
+  $('guideV').hidden = true;
+  $('guideH').hidden = true;
+}
+
 function onStripAt(p) {
   const box = state.shot?.stripBox;
   return !!box && p.x >= box.left - GRAB && p.x <= box.right + GRAB && p.y >= box.top - GRAB && p.y <= box.bottom + GRAB;
@@ -501,6 +524,7 @@ stack.addEventListener('pointerdown', (e) => {
   drag = {
     id: e.pointerId, x: e.clientX, y: e.clientY, mode: onStripAt(p) ? 'strip' : 'photo',
     focus: { ...shot.focus }, strip: { cx: box?.cx, bottom: box?.bottom, scale: box?.scale ?? 1 },
+    stripH: box ? box.bottom - box.top : 0,
     slackX: iw - sw, slackY: ih - sh, srcPerCss: sw / stack.clientWidth, layoutPerCss: W / stack.clientWidth,
   };
   if (drag.mode === 'photo' && drag.slackX < 2 && drag.slackY < 2) drag = null; // nothing to reframe
@@ -518,12 +542,12 @@ stack.addEventListener('pointermove', (e) => {
     const scale = drag.scale * (Math.hypot(a.x - b.x, a.y - b.y) / drag.dist);
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     // Grow around the strip's centre and follow the fingers' midpoint.
-    const cy = drag.cy + (mid.y - drag.mid.y) * drag.layoutPerCss;
-    shot.strip = {
-      cx: drag.cx + (mid.x - drag.mid.x) * drag.layoutPerCss,
-      bottom: cy + (drag.unitH * scale) / 2,
-      scale,
-    };
+    const c = snapStrip(
+      drag.cx + (mid.x - drag.mid.x) * drag.layoutPerCss,
+      drag.cy + (mid.y - drag.mid.y) * drag.layoutPerCss,
+      drag.layoutPerCss,
+    );
+    shot.strip = { cx: c.cx, bottom: c.cy + (drag.unitH * scale) / 2, scale };
     queueDraw();
     return;
   }
@@ -551,7 +575,9 @@ stack.addEventListener('pointermove', (e) => {
   }
   if (drag.mode === 'strip') {
     // compose() clamps to the edges; the clamped box comes back from draw().
-    shot.strip = { ...drag.strip, cx: drag.strip.cx + dx * drag.layoutPerCss, bottom: drag.strip.bottom + dy * drag.layoutPerCss };
+    const half = drag.stripH / 2;
+    const c = snapStrip(drag.strip.cx + dx * drag.layoutPerCss, drag.strip.bottom - half + dy * drag.layoutPerCss, drag.layoutPerCss);
+    shot.strip = { ...drag.strip, cx: c.cx, bottom: c.cy + half };
   } else {
     // Dragging the photo right reveals more of its left side, so the focus moves left.
     shot.focus = {
@@ -568,6 +594,7 @@ function endDrag(e) {
   const pinchOver = (drag.mode === 'pinch' || drag.mode === 'zoom') && pointers.size < 2;
   if (!pinchOver && e.pointerId !== drag.id) return;
   drag = null; // after a pinch, the finger left behind does nothing until lifted
+  hideGuides();
   if (!dragging) return;
   dragging = false;
   stack.classList.remove('dragging');

@@ -236,6 +236,10 @@ body {
 .pick-again::before { content: "↺ "; }
 
 /* ── Drag to frame ── */
+/* Centre guides while the strip snaps (never part of the photo) */
+.guide { position: absolute; z-index: 3; pointer-events: none; background: #38BDF8; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .25); }
+.guide-v { top: 0; bottom: 0; left: 50%; width: 1.5px; transform: translateX(-50%); }
+.guide-h { left: 0; right: 0; top: 50%; height: 1.5px; transform: translateY(-50%); }
 .frame .stack.draggable { touch-action: none; cursor: grab; }
 .frame .stack.dragging { cursor: grabbing; }
 .drag-hint {
