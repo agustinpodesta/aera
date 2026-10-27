@@ -15,6 +15,12 @@ const MAX_READING_AGE_H = 6;       // stale IQAir readings fall back to the mode
 const PAST_AFTER_MS = 2 * 3600e3;  // older photos get the hour they were taken
 
 const cache = new Map();
+const NOW_TTL_MS = 10 * 60e3;
+// IQAir's free plan allows 5 calls a minute for everyone. When it says "slow down" (or
+// times out), the model stands in, but only briefly, so the next person gets IQAir again.
+const STAND_IN_TTL_MS = 60e3;
+/** How long (seconds) a result may be cached; a symbol key, so it never reaches JSON. */
+export const CACHE_SECONDS = Symbol('cacheSeconds');
 
 /**
  * @param {number} lat  rounded latitude
@@ -29,18 +35,23 @@ export async function getAir(lat, lon, at = null) {
   const hit = cache.get(key);
   if (hit && hit.expires > Date.now()) return hit.value;
 
-  let value;
+  let value, ttl = past ? 864e5 : NOW_TTL_MS;
   if (past) {
     value = await openMeteoHour(lat, lon, hour);
   } else {
-    value = (await iqair(lat, lon).catch(() => null)) ?? (await openMeteoNow(lat, lon));
+    const iq = await iqair(lat, lon).catch(() => LIMITED);
+    if (iq === LIMITED) ttl = STAND_IN_TTL_MS;
+    value = (iq && iq !== LIMITED ? iq : null) ?? (await openMeteoNow(lat, lon));
   }
-  cache.set(key, { value, expires: Date.now() + (past ? 864e5 : 10 * 60e3) });
+  value[CACHE_SECONDS] = ttl / 1000;
+  cache.set(key, { value, expires: Date.now() + ttl });
   if (cache.size > 2000) cache.delete(cache.keys().next().value);
   return value;
 }
 
 export const isPast = (at) => !!at && Date.now() - at.getTime() > PAST_AFTER_MS;
+
+const LIMITED = 'limited'; // IQAir over its rate limit, erroring or timing out
 
 async function iqair(lat, lon) {
   const k = process.env.IQAIR_API_KEY;
@@ -49,7 +60,8 @@ async function iqair(lat, lon) {
     `https://api.airvisual.com/v2/nearest_city?lat=${lat}&lon=${lon}&key=${encodeURIComponent(k)}`,
     { signal: AbortSignal.timeout(TIMEOUT) },
   );
-  if (!res.ok) return null; // 429 over the minute/day limit, 4xx no coverage → model
+  if (res.status === 429 || res.status >= 500) return LIMITED; // try IQAir again soon
+  if (!res.ok) return null; // 4xx: no coverage here → the model, cached as usual
   const { status, data } = await res.json();
   const p = data?.current?.pollution;
   if (status !== 'success' || !Number.isFinite(p?.aqius)) return null;

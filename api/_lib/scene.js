@@ -222,14 +222,18 @@ const SETTLED = ['residential', 'suburb', 'neighbourhood', 'quarter', 'commercia
 export function classifyScene(s) {
   const inCity = s.cityKm != null && s.cityKm <= CITY_KM;
   const cityCore = s.cityKm != null && s.cityKm <= CITY_CORE_KM; // historic centres are low-rise, POI-light
-  const downtown = s.tall >= 5 || (inCity && s.pois >= 40) || (cityCore && s.pois >= 15);
+  // A town up in the hills (≥ 300 m, ground rising ≥ 400 m more nearby, no tall buildings)
+  // is a mountain place even with a small city nearby and lots of POIs: Fujikawaguchiko,
+  // Nachi's Seiganto-ji. Hilly lowland cities (Seoul, Suwon) sit below 300 m.
+  const highland = s.elevation >= 300 && s.relief >= 400 && s.tall < 5;
+  const downtown = s.tall >= 5 || (!highland && ((inCity && s.pois >= 40) || (cityCore && s.pois >= 15)));
   const alpine = s.inIceOrRock || s.relief >= 900;
 
   if (s.beachM <= 400 || (s.oceanM <= 350 && !downtown)) return 'coast';
   if (downtown) return 'city';
   if (s.inWood && !alpine && s.pois < 10) return 'forest';
   // Many cities sit among hills (Seoul, Suwon): inside one, only big relief counts.
-  if (alpine || s.relief >= (inCity ? 600 : 400) || (s.elevation >= 1500 && s.relief >= 200)) return 'mountains';
+  if (alpine || highland || s.relief >= (inCity ? 600 : 400) || (s.elevation >= 1500 && s.relief >= 200)) return 'mountains';
   if (s.pois >= 10 || SETTLED.includes(s.landuse)) return 'neighborhood';
   return 'countryside';
 }

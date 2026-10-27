@@ -147,3 +147,8 @@ All queried by coordinates (never city names): place names only find coordinates
 - [x] Strip labels AQI / AIR / TIME 30% bigger (25 → 33 px, spacing 4 → 5)
 - [x] Home video bug (Agustín's test): after coming back from the photo picker, the clips only switched as stills. A single refused play() made the player give up on video for good. Now a refusal shows stills briefly and retries (0.4 s, 1.5 s, 4 s), again when the page is shown, and on the next tap
 
+## Showcase templates (Oct 27 2026)
+- [x] Overlays added to Agustín's 8 sample photos → `images templates/templates with overlay/*-aera.jpg` (2160×3840, the app's own compose.js): live IQAir readings (Open-Meteo modeled for the two Patagonia spots, no IQAir city within 40 km), automatic stickers, TIME = local time at each place now. Places: Perito Moreno walkways, Laguna de los Tres (El Chaltén), Byron Bay Main Beach, Fujikawaguchiko, Seiganto-ji (Nachikatsuura), Hyeopjae / Gyeongbokgung / Jingwan-dong (photo GPS). Strip moved off the subject on 4 photos (Gyeongbokgung with black text)
+- [x] Sticker fix found on the way: hill towns read "city" (Fujikawaguchiko 853 m, Seiganto-ji 385 m: small city label nearby + many POIs). New "highland" rule: elevation ≥ 300 m, relief ≥ 400 m, no tall buildings → mountains. Checked on 20 places: only those two (and Cusco) change; Seoul, Bukchon, Suwon, Kyoto, coasts unchanged
+- [x] IQAir free plan = 5 calls/min for all users: when IQAir is rate-limited or erroring, the Open-Meteo stand-in is now cached for 60 s (server + CDN), not 10 min, so IQAir comes back quickly
+

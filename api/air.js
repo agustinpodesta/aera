@@ -2,7 +2,7 @@
 // The IQAir key stays server-side. Coordinates are rounded to ~1 km (a city-level
 // reading needs no more), which also lets nearby requests share the CDN cache.
 
-import { getAir, isPast } from './_lib/air.js';
+import { getAir, isPast, CACHE_SECONDS } from './_lib/air.js';
 import { checkBurst } from './_lib/rate-limit.js';
 
 export default async function handler(req, res) {
@@ -21,6 +21,7 @@ export default async function handler(req, res) {
     // Cached on Vercel's CDN only; browsers always ask again (readings change hourly).
     res.setHeader('Vercel-CDN-Cache-Control', isPast(at)
       ? 'max-age=2592000'
+      : air[CACHE_SECONDS] < 600 ? `max-age=${air[CACHE_SECONDS]}` // a stand-in while IQAir is busy
       : 'max-age=600, stale-while-revalidate=1200');
     res.setHeader('Cache-Control', 'max-age=0, must-revalidate');
     return res.status(200).json(air);
