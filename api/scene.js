@@ -1,4 +1,4 @@
-// GET /api/scene?lat=..&lon=.. → { scene, place, signals }
+// GET /api/scene?lat=..&lon=..[&town=1&pop=N] → { scene, place, signals }
 // Classifies where a photo was taken (city, neighborhood, coast, countryside,
 // mountains, forest) from map data. Only coordinates are sent — never the photo.
 // Coordinates are rounded to ~100 m, which also makes responses CDN-cacheable.
@@ -16,7 +16,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { scene, place, signals } = await detectScene(+lat.toFixed(3), +lon.toFixed(3));
+    // town=1: a place picked by name, so judge the town around the point (pop = population).
+    const town = req.query.town === '1';
+    const pop = Number(req.query.pop) > 0 ? Math.round(Number(req.query.pop)) : null;
+    const { scene, place, signals } = await detectScene(+lat.toFixed(3), +lon.toFixed(3), { town, pop });
     // Long-lived on Vercel's CDN (cleared on every deploy); browsers always revalidate,
     // so detector fixes reach people immediately.
     res.setHeader('Vercel-CDN-Cache-Control', 'max-age=2592000, stale-while-revalidate=86400');

@@ -59,10 +59,16 @@ export async function photoTakenAt(src) {
 }
 
 /** @returns {Promise<{scene:string|null, signals?:object}>} */
-export async function fetchScene({ lat, lon }) {
+/**
+ * The sticker for a place. `area.town`: a place picked by name, so the server judges the
+ * town around the point (a beach town's centre can sit 1 km from its beach); `area.pop`:
+ * its population, when known. GPS spots (photo, "where you are") are judged as a point.
+ */
+export async function fetchScene({ lat, lon }, area = null) {
   if (!validCoords(lat, lon)) return { scene: null };
+  const town = area?.town ? `&town=1${area.pop > 0 ? `&pop=${Math.round(area.pop)}` : ''}` : '';
   try {
-    const res = await fetch(`api/scene?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}`);
+    const res = await fetch(`api/scene?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}${town}`);
     return await res.json();
   } catch {
     return { scene: null };
@@ -110,6 +116,7 @@ export async function searchPlaces(query, count = 6) {
       lat: r.latitude,
       lon: r.longitude,
       tz: r.timezone, // IANA zone: lets a recent place be suggested for photos from that zone
+      pop: r.population ?? null, // tells a beach town from a seaside metropolis for the sticker
     }));
   } catch {
     return [];

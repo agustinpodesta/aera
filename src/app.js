@@ -172,7 +172,9 @@ async function importFile(f) {
   const seen = shot.older ? placeAt(shot.takenAt, shot.utcOffsetMin) : null;
   if (seen) {
     shot.placeName = seen.name ?? undefined;
-    return loadPlace(shot, seen.gps, {}, 'trail');
+    // A place you named for this trip is a town; a fix Aera saw you at is a spot.
+    const town = seen.name ? { town: true, pop: recentPlaces().find((r) => r.name === seen.name)?.pop ?? null } : null;
+    return loadPlace(shot, seen.gps, {}, 'trail', town);
   }
   // An older photo with no place we know: ask before showing any air (where you are
   // now is the first, one-tap answer). Taken just now: where you are, unless unknown.
@@ -280,7 +282,8 @@ function drawTo(src, w, h) {
 /* ── Place → air + scene ──────────────────────────────────────────────── */
 
 // Live shots use the air now; imported photos use the hour they were taken.
-async function loadPlace(shot, gps, pre = {}, source = null) {
+// kind: { town: true, pop } for a place picked by name (see fetchScene).
+async function loadPlace(shot, gps, pre = {}, source = null, kind = null) {
   shot.gps = gps;
   shot.gpsSource = gps ? source : null; // 'photo' | 'here' | 'trail' | 'search' | 'chosen-here'
   shot.air = null;
@@ -292,7 +295,7 @@ async function loadPlace(shot, gps, pre = {}, source = null) {
   const at = shot.live ? null : shot.takenAt;
   let [air, area] = await Promise.all([
     (shot.live && pre.air) || fetchAir(gps, at), // a prefetched reading is the air now: live shots only
-    pre.area ?? fetchScene(gps),
+    pre.area ?? fetchScene(gps, kind),
   ]);
   const scene = area?.scene ?? null;
   // One retry before showing "no reading": the air services occasionally rate-limit or time out.
@@ -718,9 +721,9 @@ function recentPlaces() {
   try { return JSON.parse(localStorage.getItem(RECENT_PLACES_KEY)) ?? []; } catch { return []; }
 }
 
-function rememberPlace({ name, detail, lat, lon, tz }) {
+function rememberPlace({ name, detail, lat, lon, tz, pop }) {
   const clean = (d) => String(d ?? '').replace(/^Recent( · )?/, '');
-  const list = [{ name, detail: clean(detail), lat, lon, ...(tz ? { tz } : {}) }, ...recentPlaces().filter((p) => p.name !== name || p.lat !== lat)];
+  const list = [{ name, detail: clean(detail), lat, lon, ...(tz ? { tz } : {}), ...(pop ? { pop } : {}) }, ...recentPlaces().filter((p) => p.name !== name || p.lat !== lat)];
   try { localStorage.setItem(RECENT_PLACES_KEY, JSON.stringify(list.slice(0, 5))); } catch { /* storage blocked */ }
 }
 
@@ -814,7 +817,7 @@ async function choosePlace(p) {
   if (p.keep) return finishPlace(shot, city);
   if (!p.here) {
     shot.placeName = p.name;
-    loadPlace(shot, { lat: p.lat, lon: p.lon }, {}, 'search');
+    loadPlace(shot, { lat: p.lat, lon: p.lon }, {}, 'search', { town: true, pop: p.pop ?? null });
     if (p.city && !city) return openRefine(p); // a suggested city: ask where exactly
     // Other photos from that trip (same time zone, within a few days) land here too.
     return finishPlace(shot, p);

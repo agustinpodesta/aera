@@ -172,6 +172,16 @@ Manaus|Brazil|-3.12|-60.02|America/Manaus
   return { name, detail: country, lat: +lat, lon: +lon, tz };
 });
 
+// The list is mostly big cities: they get a big-city population so a seaside metropolis
+// (Rio, Tel Aviv) keeps the city sticker. These are towns and resorts, judged as towns.
+const TOWNS = new Set([
+  'Punta del Este', 'Mar del Plata', 'Florianópolis', 'Bariloche', 'Bali', 'Phuket', 'Zanzibar', 'Malé',
+  'Cairns', 'Queenstown', 'Nadi', 'Papeete', 'Funchal', 'Las Palmas', 'Nice', 'Dubrovnik', 'Jeju', 'Okinawa',
+  'Gangneung', 'Gyeongju', 'Da Nang', 'Cebu', 'Cartagena', 'Cusco', 'Chiang Mai', 'Reykjavík', 'Marrakech',
+  'Guam', 'Honolulu', 'Cancún', 'Kyoto', 'Busan', 'Sapporo', 'Fukuoka',
+]);
+for (const c of CITIES) c.pop = TOWNS.has(c.name) ? null : 2_000_000;
+
 const formatters = new Map();
 
 /** Minutes east of UTC in `tz` at `date`, or null if the browser doesn't know the zone. */
