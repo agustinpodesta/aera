@@ -48,8 +48,17 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
 /* ── Screens ──────────────────────────────────────────────────────────── */
 
+// Screens change with a short crossfade (View Transitions, where the browser has it).
+const calmMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
 function show(screen) {
-  for (const id of ['home', 'preview', 'gallery', 'viewer']) $(id).hidden = id !== screen;
+  const swap = () => { for (const id of ['home', 'preview', 'gallery', 'viewer']) $(id).hidden = id !== screen; };
+  const from = state.screen;
+  if (from !== screen && document.startViewTransition && !calmMotion.matches && !document.hidden) {
+    try { document.startViewTransition(swap); } catch { swap(); }
+  } else {
+    swap();
+  }
   if (screen !== 'gallery' && sel.on) setSelecting(false);
   if (screen !== 'preview') closeSheet();
   if (screen === 'preview') $('pickAgain').hidden = true;
@@ -346,14 +355,16 @@ function openPreview(shot) {
 
 const effectiveScene = () => (state.scene === 'auto' ? state.shot?.detected ?? null : state.scene);
 
-// While dragging, draw at 1080×1920 to keep it smooth; everything else at full export size.
+// The preview canvas stays at 1080×1920 (a phone screen's real pixels) and is never
+// resized; while a finger moves things it draws the strip as a ready-made sticker. The
+// full-size photo (up to 2160×3840) is drawn on a separate canvas once you pause.
 function draw() {
   const shot = state.shot;
   const zoom = shot.zoom ?? 1;
   shot.stripBox = compose(canvas, {
-    // Zoomed in, the final frame draws from the full-resolution original so it stays sharp.
+    // Zoomed in and at rest, draw from the full-resolution original so it stays sharp.
     photo: !dragging && zoom > 1.01 ? shot.img : shot.src,
-    focus: shot.focus, zoom, ink: shot.ink ?? 'light', strip: shot.strip, scale: dragging ? 1 : shot.scale,
+    focus: shot.focus, zoom, ink: shot.ink ?? 'light', strip: shot.strip, scale: 1, fast: dragging,
     scene: effectiveScene(), reading: readingFor(shot),
   });
   shot.strip = { cx: shot.stripBox.cx, bottom: shot.stripBox.bottom, scale: shot.stripBox.scale }; // keep the clamped spot
@@ -361,27 +372,53 @@ function draw() {
 
 function render() {
   draw();
-  prepareFile();
+  scheduleExport();
 }
 
-function prepareFile() {
-  state.file = null;
-  $('save').disabled = true;
+// The shareable JPEG: made a beat after the last change (so a run of small adjustments
+// costs one export, not one each), on its own canvas, then shown as a real <img> for
+// long-press saving. Share waits for it if tapped in between.
+const EXPORT_DELAY = 220;
+const exportCanvas = document.createElement('canvas');
+let exportTimer = 0, exportToken = 0;
+
+function scheduleExport() {
+  clearTimeout(exportTimer);
   hidePreviewImage();
   const shot = state.shot;
-  if (shot.loading) return; // never share a half-loaded reading
-  canvas.toBlob((blob) => {
-    if (!blob || state.shot !== shot || shot.loading || dragging) return;
-    const d = shot.takenAt, p2 = (n) => String(n).padStart(2, '0');
-    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
-    state.file = new File([blob], `aera-${stamp}.jpg`, { type: 'image/jpeg' });
-    $('save').disabled = false;
-    if (!shot.pending) keepShot(shot, blob);
-    const share = canShareFile(state.file);
-    $('save').textContent = share ? 'Share' : 'Download';
-    $('download').hidden = !share; // with a share sheet, keep a one-tap "save to my photos" too
-    showPreviewImage(blob);
-  }, 'image/jpeg', 0.92);
+  state.file = null;
+  state.fileReady = null;
+  $('save').disabled = !shot || !!shot.loading; // never share a half-loaded reading
+  if (!shot || shot.loading) return;
+  const token = ++exportToken;
+  state.fileReady = new Promise((resolve) => {
+    exportTimer = setTimeout(() => {
+      if (token !== exportToken || state.shot !== shot || dragging) return resolve(null);
+      const zoom = shot.zoom ?? 1;
+      compose(exportCanvas, {
+        photo: zoom > 1.01 ? shot.img : shot.src, focus: shot.focus, zoom, ink: shot.ink ?? 'light',
+        strip: shot.strip, scale: shot.scale, scene: effectiveScene(), reading: readingFor(shot),
+      });
+      exportCanvas.toBlob((blob) => {
+        if (!blob || token !== exportToken || state.shot !== shot || shot.loading) return resolve(null);
+        const d = shot.takenAt, p2 = (n) => String(n).padStart(2, '0');
+        const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+        state.file = new File([blob], `aera-${stamp}.jpg`, { type: 'image/jpeg' });
+        if (!shot.pending) keepShot(shot, blob);
+        const share = canShareFile(state.file);
+        $('save').textContent = share ? 'Share' : 'Download';
+        $('download').hidden = !share; // with a share sheet, keep a one-tap "save to my photos" too
+        if (!dragging) showPreviewImage(blob);
+        resolve(state.file);
+      }, 'image/jpeg', 0.92);
+    }, EXPORT_DELAY);
+  });
+}
+
+// The finished file, waiting for the export in flight if there is one.
+async function currentFile() {
+  for (let i = 0; i < 4 && !state.file && state.fileReady; i++) await state.fileReady;
+  return state.file;
 }
 
 // Into the on-device gallery; later edits update the same entry. The original goes in
@@ -459,7 +496,8 @@ const snapped = { x: false, y: false };
 function snapStrip(cx, cy, layoutPerCss) {
   const tol = SNAP_CSS * layoutPerCss;
   const x = Math.abs(cx - W / 2) < tol, y = Math.abs(cy - H / 2) < tol;
-  if ((x && !snapped.x) || (y && !snapped.y)) navigator.vibrate?.(8);
+  // Buzz only once the page has had a real tap (browsers block it before, noisily).
+  if (((x && !snapped.x) || (y && !snapped.y)) && navigator.userActivation?.hasBeenActive !== false) navigator.vibrate?.(8);
   snapped.x = x;
   snapped.y = y;
   $('guideV').hidden = !x;
@@ -663,6 +701,7 @@ function renderPlace() {
   // but make the change one tap. A real boolean: toggle(x, undefined) flips the class.
   const guessed = Boolean(shot.older) && (shot.gpsSource === 'here' || shot.gpsSource === 'trail');
   el.classList.toggle('ask', !shot.gps && !shot.loading);
+  el.classList.toggle('loading', !!shot.loading);
   if (shot.loading) { el.textContent = 'Reading the air…'; return; }
   if (!shot.gps) {
     const off = awayOffset(shot);
@@ -873,6 +912,8 @@ async function openGallery({ push = true } = {}) {
     const li = document.createElement('li');
     const b = document.createElement('button');
     const img = document.createElement('img');
+    img.decoding = 'async';
+    img.onload = () => img.classList.add('in'); // fade in once decoded, not line by line
     img.src = url;
     img.alt = `${fmt.format(r.createdAt)}${r.aqi != null ? `, AQI ${r.aqi}` : ''}`;
     b.append(img);
@@ -1010,8 +1051,8 @@ async function updateGalleryButton() {
 
 $('shutter').addEventListener('click', openCamera);
 $('retake').addEventListener('click', () => (state.shot?.fromGallery ? deleteEdited() : state.shot?.pending ? pickPhoto() : openCamera()));
-$('save').addEventListener('click', () => { keepPending(); shareFile(state.file); });
-$('download').addEventListener('click', () => { keepPending(); saveToDevice(state.file); });
+$('save').addEventListener('click', async () => { if (!(await currentFile())) return; keepPending(); shareFile(state.file); });
+$('download').addEventListener('click', async () => { if (!(await currentFile())) return; keepPending(); saveToDevice(state.file); });
 $('pickAgain').addEventListener('click', pickPhoto);
 $('galleryBtn').addEventListener('click', () => openGallery());
 $('viewerShare').addEventListener('click', () => shareFile(state.viewer?.file));

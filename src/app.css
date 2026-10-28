@@ -323,3 +323,42 @@ body {
 @keyframes hint-in { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes hint-float { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -5px); } }
 @media (prefers-reduced-motion: reduce) { .tap-hint { animation: none; } }
+
+/* ── Motion: soft, quick, and out of the way ──────────────────────────── */
+/* ease-out "lands" like something set down gently; 150–300 ms for responses */
+:root { --ease-out: cubic-bezier(.2, .8, .2, 1); }
+
+/* Screens crossfade (View Transitions) */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; animation-timing-function: ease-out; }
+
+/* Pressed controls give a little under the finger */
+.btn, .icon-btn, .result, .gallery-btn, .pick-again, .chip, .grid button, .place {
+  transition: transform 120ms var(--ease-out), background-color 200ms ease, opacity 200ms ease;
+  touch-action: manipulation;
+}
+.btn:active, .icon-btn:active, .result:active, .gallery-btn:active, .pick-again:active, .chip:active, .grid button:active, .place:active { transform: scale(.97); }
+.btn:disabled:active { transform: none; }
+
+/* The place sheet rises; its backdrop fades */
+.sheet:not([hidden]) { animation: aera-fade 200ms ease-out; }
+.sheet:not([hidden]) .sheet-card { animation: aera-rise 280ms var(--ease-out); }
+/* Toast and "choose another" arrive instead of popping */
+.toast:not([hidden]) { animation: aera-drop 220ms var(--ease-out); }
+.pick-again:not([hidden]) { animation: aera-rise 260ms var(--ease-out); }
+/* Gallery thumbnails fade in once decoded */
+.grid img { opacity: 0; transition: opacity 240ms ease-out; }
+.grid img.in { opacity: 1; }
+/* "Reading the air…" breathes while it waits */
+.place.loading { animation: aera-breathe 1.4s ease-in-out infinite; }
+
+@keyframes aera-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aera-rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes aera-drop { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes aera-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+  .sheet:not([hidden]), .sheet:not([hidden]) .sheet-card, .toast:not([hidden]), .pick-again:not([hidden]), .place.loading { animation: none; }
+  .grid img { transition: none; opacity: 1; }
+}
+

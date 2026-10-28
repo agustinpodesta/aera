@@ -13,6 +13,7 @@ const FADE_BEFORE_END = 0.9; // seconds: start the next clip this long before th
 const STILL_MS = 4200;       // stills rotate at the clip pace while video is held up
 const CHECK_MS = 1500;       // watchdog period
 const LOAD_GRACE_MS = 8000;  // a clip still downloading gets this long before it's skipped
+const SKIP_GAP_MS = 3000;    // at most one skip per 3 s, so a network drop can't cycle every clip
 
 const pad = (n) => String(n).padStart(2, '0');
 const clipUrl = (n) => `media/home/${pad(n)}.mp4`;
@@ -35,7 +36,7 @@ export function homeBackground(root) {
   let front = a, back = b;  // front = the visible video
   let active = false;       // home screen showing
   let stillsTimer = 0, checkTimer = 0, swapping = false;
-  let strikes = 0, loadingFor = 0, lastTime = -1, refusedByPolicy = false;
+  let strikes = 0, loadingFor = 0, lastTime = -1, refusedByPolicy = false, lastSkip = 0;
   const frames = new WeakMap(); // video → frames drawn since the last check
 
   still.src = stillUrl(order[0]);
@@ -123,8 +124,11 @@ export function homeBackground(root) {
     }).finally(() => { swapping = false; });
   }
 
-  // Skip to the clip after this one (the current one won't play).
+  // Skip to the clip after this one (the current one won't play). Offline, or right after
+  // another skip, wait instead: the watchdog (or coming back online) tries again.
   function skip() {
+    if (!navigator.onLine || Date.now() - lastSkip < SKIP_GAP_MS) return;
+    lastSkip = Date.now();
     at = (at + 1) % order.length;
     front.classList.remove('on');
     load(front, order[at]);
@@ -149,7 +153,8 @@ export function homeBackground(root) {
       if (!v.dataset.handedOff) { v.dataset.handedOff = '1'; swap(); }
       else if (!swapping) { delete v.dataset.handedOff; v.currentTime = 0; play(); }
     });
-    v.addEventListener('error', () => { if (v === front && running()) skip(); });
+    // A broken clip (not a cancelled load: that happens on every src change) → the next one.
+    v.addEventListener('error', () => { if (v === front && running() && v.error && v.error.code !== 1) skip(); });
   }
 
   /* ── Watchdog: are new frames really reaching the screen? ── */

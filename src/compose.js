@@ -80,13 +80,15 @@ export async function ensureFonts() {
  *   (layout units; scale 1 = 600 wide); clamped to SAFE
  * @returns {{cx:number, bottom:number, scale:number, left:number, right:number, top:number}} the strip's actual box
  */
-export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 }, zoom = 1, ink = 'light', scale = 1, strip = STRIP_HOME }) {
+export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5, y: 0.5 }, zoom = 1, ink = 'light', scale = 1, strip = STRIP_HOME, fast = false }) {
   INK = INKS[ink] ?? INKS.light;
-  canvas.width = Math.round(W * scale);
-  canvas.height = Math.round(H * scale);
+  // Resize only when the size changes: resizing reallocates the whole bitmap.
+  const cw = Math.round(W * scale), ch = Math.round(H * scale);
+  if (canvas.width !== cw) canvas.width = cw;
+  if (canvas.height !== ch) canvas.height = ch;
   const ctx = canvas.getContext('2d');
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
-  ctx.imageSmoothingQuality = 'high';
+  ctx.imageSmoothingQuality = fast ? 'low' : 'high';
 
   if (photo) drawCover(ctx, photo, 0, 0, W, H, focus, zoom);
   else drawPlaceholder(ctx, 0, 0, W, H);
@@ -101,17 +103,47 @@ export function compose(canvas, { photo, reading, scene = null, focus = { x: 0.5
   const bottom = clamp(strip.bottom, SAFE.top + h, SAFE.bottom);
 
   drawTint(ctx);
-  // Lay the strip out at size 1 around its bottom-centre anchor, then scale it there.
-  CX = cx;
-  X0 = cx - STRIP_W / 2;
-  X1 = cx + STRIP_W / 2;
-  ctx.save();
-  ctx.translate(cx, bottom);
-  ctx.scale(k, k);
-  ctx.translate(-cx, -bottom);
-  drawStrip(ctx, reading, rows, bottom - total, scene);
-  ctx.restore();
+  if (fast) {
+    // While a finger moves the strip, its look doesn't change: draw it once as a sticker
+    // (blurred text shadows are the costliest thing here) and just place that each frame.
+    const sprite = stripSprite(reading, rows, total, scene, ink, k * scale);
+    ctx.drawImage(sprite, cx - (STRIP_W / 2 + SPRITE_PAD) * k, bottom - (total + SPRITE_PAD) * k,
+      (STRIP_W + 2 * SPRITE_PAD) * k, (total + 2 * SPRITE_PAD) * k);
+  } else {
+    // Lay the strip out at size 1 around its bottom-centre anchor, then scale it there.
+    CX = cx;
+    X0 = cx - STRIP_W / 2;
+    X1 = cx + STRIP_W / 2;
+    ctx.save();
+    ctx.translate(cx, bottom);
+    ctx.scale(k, k);
+    ctx.translate(-cx, -bottom);
+    drawStrip(ctx, reading, rows, bottom - total, scene);
+    ctx.restore();
+  }
   return { cx, bottom, scale: k, left: cx - w / 2, right: cx + w / 2, top: bottom - h };
+}
+
+// The strip as a sticker (drawn once per look, reused while dragging or pinching).
+const SPRITE_PAD = 40; // room for text shadows around the strip
+let spriteCache = null;
+
+function stripSprite(reading, rows, total, scene, ink, res) {
+  const key = JSON.stringify([rows, scene, ink, total, reading.source, reading.scope, reading.updatedAt, reading.pending, reading.historical, reading.sample, reading.timeZone, reading.utcOffsetMin]);
+  // Redraw when the look changes, or when pinching makes it much bigger than drawn.
+  if (spriteCache && spriteCache.key === key && res <= spriteCache.res * 1.25) return spriteCache.canvas;
+  const r = Math.min(Math.max(res, 0.5), 3);
+  const c = spriteCache?.canvas ?? document.createElement('canvas');
+  c.width = Math.ceil((STRIP_W + 2 * SPRITE_PAD) * r);
+  c.height = Math.ceil((total + 2 * SPRITE_PAD) * r);
+  const sctx = c.getContext('2d');
+  sctx.setTransform(r, 0, 0, r, 0, 0);
+  CX = SPRITE_PAD + STRIP_W / 2;
+  X0 = SPRITE_PAD;
+  X1 = SPRITE_PAD + STRIP_W;
+  drawStrip(sctx, reading, rows, SPRITE_PAD, scene);
+  spriteCache = { key, res: r, canvas: c };
+  return c;
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
