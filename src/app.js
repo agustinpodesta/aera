@@ -840,7 +840,7 @@ $('placeQuery').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
   const q = e.target.value;
   searchTimer = setTimeout(async () => {
-    const places = await searchPlaces(q, refine ? 30 : 6);
+    const places = await searchPlaces(q, refine ? 30 : 6, refine);
     if ($('placeQuery').value === q) renderResults(places, { showRecent: !q.trim() });
   }, 250);
 });

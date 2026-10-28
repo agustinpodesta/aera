@@ -103,10 +103,29 @@ export async function fetchAir({ lat, lon }, at = null) {
   }
 }
 
-/** City search for photos without a location (Open-Meteo geocoding, keyless, CORS-enabled). */
-export async function searchPlaces(query, count = 6) {
+/**
+ * Place search for photos without a location. Two keyless, CORS-enabled sources together:
+ *  - Open-Meteo geocoding (GeoNames): cities and towns, with population and time zone;
+ *  - Photon (komoot, OpenStreetMap): what GeoNames misses, e.g. Nachikatsuura, neighbourhoods
+ *    like Jingwan-dong, beaches, lakes, glaciers, temples.
+ * Open-Meteo's results come first; Photon adds the rest (no streets or bus stops), and the
+ * same place found twice shows once. `near` biases Photon towards a city ("Where in…?").
+ */
+export async function searchPlaces(query, count = 6, near = null) {
   const q = query.trim();
   if (q.length < 2) return [];
+  const [cities, osm] = await Promise.all([openMeteoSearch(q, count), photonSearch(q, near)]);
+  const out = [];
+  for (const p of [...cities, ...osm]) {
+    // Same place twice: close by under a similar name, or the very same name and region
+    // (OpenStreetMap stores big features such as a glacier in several pieces).
+    if (out.some((o) => (sameName(o.name, p.name) && kmApart(o, p) < 15) || (plain(o.name) === plain(p.name) && o.detail === p.detail))) continue;
+    out.push(p);
+  }
+  return out.slice(0, Math.max(count, 8));
+}
+
+async function openMeteoSearch(q, count) {
   try {
     const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=${count}&language=en`);
     const { results = [] } = await res.json();
@@ -121,4 +140,38 @@ export async function searchPlaces(query, count = 6) {
   } catch {
     return [];
   }
+}
+
+// OpenStreetMap kinds worth offering as "where this photo was taken".
+const PHOTON_KEYS = new Set(['place', 'natural', 'tourism', 'historic', 'leisure', 'water', 'waterway', 'mountain_pass']);
+const PHOTON_SKIP = new Set(['house', 'houses', 'plot', 'farm', 'isolated_dwelling', 'yes', 'information', 'hotel', 'hostel', 'motel', 'guest_house', 'apartment', 'camp_pitch', 'picnic_site', 'viewpoint_disused']);
+
+async function photonSearch(q, near) {
+  const bias = near ? `&lat=${near.lat.toFixed(3)}&lon=${near.lon.toFixed(3)}&zoom=10&location_bias_scale=0.3` : '';
+  try {
+    const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=12&lang=en${bias}`);
+    const { features = [] } = await res.json();
+    return features
+      .map(({ geometry, properties: p }) => ({ p, lat: geometry?.coordinates?.[1], lon: geometry?.coordinates?.[0] }))
+      .filter(({ p, lat, lon }) => p.name && validCoords(lat, lon) && p.type !== 'street' && !PHOTON_SKIP.has(p.osm_value)
+        && (PHOTON_KEYS.has(p.osm_key) || (p.osm_key === 'amenity' && p.osm_value === 'place_of_worship')
+          || (p.osm_key === 'boundary' && p.osm_value === 'administrative')))
+      .map(({ p, lat, lon }) => ({
+        name: p.name,
+        detail: [p.city !== p.name ? p.city : null, p.state, p.country].filter(Boolean).join(', '),
+        lat,
+        lon,
+        tz: null,
+        pop: null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+const plain = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const sameName = (a, b) => plain(a) === plain(b) || plain(a).startsWith(plain(b)) || plain(b).startsWith(plain(a));
+function kmApart(a, b) {
+  const x = (b.lon - a.lon) * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180);
+  return Math.hypot(x, b.lat - a.lat) * 111.2;
 }
