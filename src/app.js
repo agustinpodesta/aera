@@ -124,16 +124,18 @@ async function onCapture(e) {
   if (here.gps) return loadPlace(shot, here.gps, here, 'here');
   const gps = await photoGps(f); // location off: fall back to the photo's own GPS, if any
   loadPlace(shot, gps, {}, gps ? 'photo' : null);
+  if (!gps) askWhere(shot);
 }
 
 // A photo from the camera roll: the place comes from its own GPS, the air is the air
 // there *now* (no reliable historical source). For an old photo the strip's TIME
 // becomes now too, so the report never claims to be from the day the photo was taken.
-// Android hides the GPS of picked photos from every website, so without it: a photo
-// taken just now → where you are; an older one → where Aera saw you around that time,
-// or a place you picked for that trip (the on-device trail); else where you are — unless
-// the photo's time zone shows it was taken somewhere else. Then "here" would be wrong,
-// so the likely places for that time zone are offered as one tap instead.
+// Android hides the GPS of picked photos from every website. Without it Aera never
+// assumes where a photo was taken (per Agustín): it asks "Where was this taken?" before
+// showing any air, with the likeliest answers one tap away — the place you picked for
+// this trip, where you are now, recent places (or that time zone's cities, for a photo
+// from another time zone). Known without asking: Aera's own shutter, and photos that
+// keep their GPS (shared from Files by Google, iPhone).
 function onFile(e) {
   const f = e.target.files?.[0];
   if (f) importFile(f);
@@ -169,19 +171,19 @@ async function importFile(f) {
     recordPlace(gps, shot.takenAt, null, shot.utcOffsetMin);
     return loadPlace(shot, gps, {}, 'photo');
   }
-  const seen = shot.older ? placeAt(shot.takenAt, shot.utcOffsetMin) : null;
-  if (seen) {
-    shot.placeName = seen.name ?? undefined;
-    // A place you named for this trip is a town; a fix Aera saw you at is a spot.
-    const town = seen.name ? { town: true, pop: recentPlaces().find((r) => r.name === seen.name)?.pop ?? null } : null;
-    return loadPlace(shot, seen.gps, {}, 'trail', town);
-  }
-  // An older photo with no place we know: ask before showing any air (where you are
-  // now is the first, one-tap answer). Taken just now: where you are, unless unknown.
-  const here = shot.older ? null : await locateHere();
-  if (here?.gps) return loadPlace(shot, here.gps, here, 'here');
+  // Not known: ask. A place you picked for this trip (same time zone, within days) is
+  // offered first, as a suggestion, never applied on its own.
+  const seen = placeAt(shot.takenAt, shot.utcOffsetMin);
+  shot.tripGuess = seen?.name
+    ? { name: seen.name, lat: seen.gps.lat, lon: seen.gps.lon, pop: recentPlaces().find((r) => r.name === seen.name)?.pop ?? null, detail: 'Your place on this trip' }
+    : null;
   loadPlace(shot, null);
-  if (!shot.older) locateHere(); // warm up "where you are now" for the sheet
+  locateHere(); // warm up "<town> · where you are now"
+  askWhere(shot);
+}
+
+// No place for this photo: the strip waits ("…") and the place sheet asks.
+function askWhere(shot) {
   if (state.shot === shot && state.screen === 'preview') openSheet();
 }
 
@@ -711,7 +713,7 @@ function openSheet({ focus = false } = {}) {
   // to change the place: straight to typing.
   if (focus && off == null) setTimeout(() => $('placeQuery').focus(), 50);
   // The town you're in may arrive a moment later: relabel "where you are now".
-  state.here?.then(() => { if (!$('sheet').hidden && !refine && !$('placeQuery').value) renderResults([], { showRecent: true }); });
+  state.here?.then((h) => h.area).then(() => { if (!$('sheet').hidden && !refine && !$('placeQuery').value) renderResults([], { showRecent: true }); });
 }
 
 // The last few places picked by search, kept on this device for one-tap reuse.
@@ -782,14 +784,16 @@ function hereItem() {
 function defaultPlaces() {
   if (refine) return [{ name: `Just ${refine.name}`, detail: refine.detail ?? '', keep: true }];
   const here = hereItem();
-  const recent = recentPlaces().map((p) => ({ ...p, detail: p.detail ? `Recent · ${p.detail}` : 'Recent' }));
+  const trip = state.shot?.tripGuess ? [state.shot.tripGuess] : [];
+  const recent = recentPlaces().filter((p) => p.name !== trip[0]?.name)
+    .map((p) => ({ ...p, detail: p.detail ? `Recent · ${p.detail}` : 'Recent' }));
   const off = awayOffset(state.shot);
-  if (off == null) return [...here, ...recent];
+  if (off == null) return [...trip, ...here, ...recent];
   const at = state.shot.takenAt;
   const fits = recent.filter((p) => p.tz && offsetIn(p.tz, at) === off);
-  const taken = new Set(fits.map((p) => p.name));
+  const taken = new Set([...fits.map((p) => p.name), trip[0]?.name]);
   const cities = citiesAtOffset(off, at).filter((c) => !taken.has(c.name)).map((c) => ({ ...c, city: true }));
-  return [...fits, ...cities, ...here];
+  return [...trip, ...fits.filter((p) => p.name !== trip[0]?.name), ...cities, ...here];
 }
 
 function renderResults(places, { showRecent = false } = {}) {
