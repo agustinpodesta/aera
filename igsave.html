@@ -15,61 +15,66 @@
     p { color: var(--soft); margin: 6px 0; }
     .card { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
     .card b { font-weight: 500; }
-    .card small { display: block; color: var(--soft); margin-top: 2px; }
+    .card small { display: block; color: var(--soft); margin-top: 4px; }
     .try { display: inline-block; font: inherit; color: var(--bg); background: var(--fg); border: 0; border-radius: 999px; padding: 10px 18px; margin-top: 12px; text-decoration: none; }
-    .verdict { display: flex; gap: 8px; margin-top: 12px; align-items: center; color: var(--soft); font-size: 13px; }
+    label.try input { display: none; }
+    .status { margin-top: 10px; font-size: 13px; color: var(--soft); min-height: 1em; }
+    .verdict { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; color: var(--soft); font-size: 13px; }
     .verdict button { font: inherit; font-size: 13px; color: var(--fg); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; }
     .verdict button.on[data-v="yes"] { border-color: var(--ok); color: var(--ok); }
     .verdict button.on[data-v="no"] { border-color: var(--bad); color: var(--bad); }
-    .card img { display: block; width: 46%; margin-top: 12px; border-radius: 8px; }
     .meta { color: var(--soft); font-size: 12px; word-break: break-all; }
-    textarea { width: 100%; height: 150px; margin-top: 10px; background: #1b1c19; color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: 12px/1.4 ui-monospace, Menlo, monospace; }
+    textarea { width: 100%; height: 170px; margin-top: 10px; background: #1b1c19; color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: 12px/1.4 ui-monospace, Menlo, monospace; }
     .ok { color: var(--ok); } .bad { color: var(--bad); }
+    /* H: the screenshot screen */
+    #shot { position: fixed; inset: 0; z-index: 10; background: #000; overflow: hidden; }
+    #shot .fill { position: absolute; inset: -40px; width: calc(100% + 80px); height: calc(100% + 80px); object-fit: cover; filter: blur(28px) brightness(.7); }
+    #shot .photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+    #shot[hidden] { display: none; }
   </style>
 </head>
 <body>
-  <h1>Aera · save test</h1>
-  <p>Open this page from an Instagram DM, and stay inside Instagram. Try each way below, then check your gallery (Google Photos or Samsung Gallery, including the Download album). Each image has a big letter so you know which way saved it. Mark Yes or No.</p>
+  <h1>Aera · save test 2</h1>
+  <p>Open this from an Instagram DM and stay inside Instagram. If Instagram asks to leave for an external browser, say no — the point is to stay. Mark Yes or No on each.</p>
   <p id="where" class="meta"></p>
 
-  <h2>Save buttons</h2>
+  <h2>Get the photo out</h2>
 
-  <div class="card" data-test="A">
-    <b>A · How Aera saves today</b><small>Image made on the phone, downloaded directly</small>
-    <button class="try" id="tryA">Save test A</button>
-    <div class="verdict">In gallery? <button data-v="yes">Yes</button><button data-v="no">No</button></div>
+  <div class="card" data-test="G">
+    <b>G · Copy the photo</b>
+    <small>Tap Copy. Then open Instagram → new Story → tap Aa (text) → in the keyboard, open the clipboard (📋) and tap the photo. Or press and hold in the text box → Paste.</small>
+    <button class="try" id="tryG">Copy photo</button>
+    <div class="status" id="statusG"></div>
+    <div class="verdict">Got it into a Story? <button data-v="yes">Yes</button><button data-v="no">No</button></div>
   </div>
 
-  <div class="card" data-test="B">
-    <b>B · Other format</b><small>Same image, handed over in a different form</small>
-    <button class="try" id="tryB">Save test B</button>
-    <div class="verdict">In gallery? <button data-v="yes">Yes</button><button data-v="no">No</button></div>
+  <div class="card" data-test="H">
+    <b>H · Screenshot screen</b>
+    <small>Tap Open. The photo fills the screen; take a screenshot (Power + Volume down), then tap the photo to close. Check the screenshot in your gallery: does it look good enough for a Story? Do Instagram's top bar or your status bar show in it?</small>
+    <button class="try" id="tryH">Open</button>
+    <div class="status" id="statusH"></div>
+    <div class="verdict">Screenshot good enough? <button data-v="yes">Yes</button><button data-v="no">No</button></div>
+    <div class="verdict">Instagram's top bar in it? <button data-k="H2" data-v="yes">Yes</button><button data-k="H2" data-v="no">No</button></div>
   </div>
 
-  <div class="card" data-test="C">
-    <b>C · From the server</b><small>A file on Aera's server, marked "download this"</small>
-    <a class="try" href="/media/igtest/c.jpg" download="aera-test-C.jpg">Save test C</a>
-    <div class="verdict">In gallery? <button data-v="yes">Yes</button><button data-v="no">No</button></div>
+  <h2>Can Aera work in here at all?</h2>
+
+  <div class="card" data-test="I">
+    <b>I · Location</b><small>Tap and allow if asked.</small>
+    <button class="try" id="tryI">Find me</button>
+    <div class="status" id="statusI"></div>
   </div>
 
-  <div class="card" data-test="D">
-    <b>D · Server link</b><small>A plain link to a file on Aera's server</small>
-    <a class="try" href="/media/igtest/d.jpg" download="aera-test-D.jpg">Save test D</a>
-    <div class="verdict">In gallery? <button data-v="yes">Yes</button><button data-v="no">No</button></div>
+  <div class="card" data-test="J">
+    <b>J · Camera</b><small>Does the camera open? Take any photo.</small>
+    <label class="try">Open camera<input type="file" accept="image/*" capture="environment" id="camJ"></label>
+    <div class="status" id="statusJ"></div>
   </div>
 
-  <h2>Press and hold</h2>
-
-  <div class="card" data-test="E">
-    <b>E · Hold the server image</b><small>Press and hold it. Is there a "Download / Save image" option?</small>
-    <img src="/media/igtest/e.jpg" alt="Test E">
-    <div class="verdict">In gallery? <button data-v="yes">Yes</button><button data-v="no">No</button></div>
-  </div>
-
-  <div class="card" data-test="F">
-    <b>F · Hold the phone-made image</b><small>Press and hold it. Is there a "Download / Save image" option?</small>
-    <img id="imgF" alt="Test F">
-    <div class="verdict">In gallery? <button data-v="yes">Yes</button><button data-v="no">No</button></div>
+  <div class="card" data-test="K">
+    <b>K · Pick from gallery</b><small>Does your gallery open? Pick any photo.</small>
+    <label class="try">Choose photo<input type="file" accept="image/*" id="pickK"></label>
+    <div class="status" id="statusK"></div>
   </div>
 
   <h2>Results</h2>
@@ -77,66 +82,76 @@
   <textarea id="out" readonly></textarea>
   <button class="try" id="copy">Copy results</button>
 
+  <div id="shot" hidden>
+    <img class="fill" src="/media/igtest/h.jpg" alt="">
+    <img class="photo" src="/media/igtest/h.jpg" alt="Aera photo">
+  </div>
+
   <script>
+    const $ = (id) => document.getElementById(id);
     const ua = navigator.userAgent;
-    const probe = new File([new Uint8Array([255, 216, 255])], 'a.jpg', { type: 'image/jpeg' });
-    let canShareFiles = false;
-    try { canShareFiles = !!navigator.canShare?.({ files: [probe] }); } catch {}
     const app = (ua.match(/Instagram|FBAV|FB_IAB|Barcelona|musical_ly|Snapchat|SamsungBrowser|Chrome/) || ['?'])[0];
-    const info = { app, inAppBrowser: /; wv\)/.test(ua), share: !!navigator.share, shareFiles: canShareFiles };
-    document.getElementById('where').textContent =
-      `Opened in: ${app}${info.inAppBrowser ? ' (in-app browser)' : ''} · share sheet: ${info.share ? 'yes' : 'no'} · share photos: ${canShareFiles ? 'yes' : 'no'}`;
+    const inApp = /; wv\)/.test(ua);
+    $('where').textContent = `Opened in: ${app}${inApp ? ' (in-app browser)' : ''}`;
+    const results = {};
+    const set = (k, v, el) => { results[k] = v; if (el) $(el).textContent = v; report(); };
 
-    // A labelled test image made on the phone, like Aera's photos.
-    function made(letter, color) {
-      const c = document.createElement('canvas');
-      c.width = 1080; c.height = 1920;
-      const g = c.getContext('2d');
-      g.fillStyle = color; g.fillRect(0, 0, c.width, c.height);
-      g.fillStyle = '#F2EDE4'; g.textAlign = 'center';
-      g.font = 'bold 90px sans-serif'; g.fillText('AERA TEST', 540, 790);
-      g.font = 'bold 420px sans-serif'; g.fillText(letter, 540, 1150);
-      return c;
-    }
-    const toBlob = (c) => new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
-
-    function clickLink(href, name) {
-      const a = document.createElement('a');
-      a.href = href; a.download = name;
-      document.body.appendChild(a); a.click(); a.remove();
-    }
-
-    document.getElementById('tryA').onclick = async () => {
-      const url = URL.createObjectURL(await toBlob(made('A', '#B4462E')));
-      clickLink(url, 'aera-test-A.jpg');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    // G: put the photo on the clipboard (PNG is the one image type browsers can copy)
+    $('tryG').onclick = async () => {
+      if (!window.ClipboardItem || !navigator.clipboard?.write) return set('G-copy', 'not supported here', 'statusG');
+      try {
+        const png = fetch('/media/igtest/g.png').then((r) => r.blob());
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+        set('G-copy', 'copied ✓ — now try pasting in a Story', 'statusG');
+      } catch (err) {
+        set('G-copy', `failed: ${err.name}`, 'statusG');
+      }
     };
-    document.getElementById('tryB').onclick = () => {
-      clickLink(made('B', '#B07A1E').toDataURL('image/jpeg', 0.85), 'aera-test-B.jpg');
-    };
-    toBlob(made('F', '#2E6E8C')).then((b) => { document.getElementById('imgF').src = URL.createObjectURL(b); });
 
-    const verdicts = {};
+    // H: full-screen photo for a screenshot (true full screen if the app allows it)
+    $('tryH').onclick = async () => {
+      $('shot').hidden = false;
+      set('H-fullscreen', 'full screen: trying…', 'statusH');
+      const wait = new Promise((r) => setTimeout(r, 1500));
+      try { await Promise.race([$('shot').requestFullscreen?.(), wait]); } catch (err) { return set('H-fullscreen', `full screen: no (${err.name})`, 'statusH'); }
+      set('H-fullscreen', `full screen: ${document.fullscreenElement ? 'yes' : 'no'}`, 'statusH');
+    };
+    $('shot').onclick = () => { if (document.fullscreenElement) document.exitFullscreen?.(); $('shot').hidden = true; };
+
+    // I: location
+    $('tryI').onclick = () => {
+      if (!navigator.geolocation) return set('I-location', 'not supported', 'statusI');
+      set('I-location', 'asking…', 'statusI');
+      navigator.geolocation.getCurrentPosition(
+        (p) => set('I-location', `works ✓ (±${Math.round(p.coords.accuracy)} m)`, 'statusI'),
+        (e) => set('I-location', `failed: ${['', 'permission denied', 'unavailable', 'timeout'][e.code] || e.message}`, 'statusI'),
+        { enableHighAccuracy: true, timeout: 15000 });
+    };
+
+    // J, K: camera and gallery
+    $('camJ').onchange = (e) => { const f = e.target.files[0]; set('J-camera', f ? `works ✓ (${Math.round(f.size / 1024)} KB)` : 'nothing came back', 'statusJ'); };
+    $('pickK').onchange = (e) => { const f = e.target.files[0]; set('K-gallery', f ? `works ✓ (${Math.round(f.size / 1024)} KB)` : 'nothing came back', 'statusK'); };
+
     for (const card of document.querySelectorAll('[data-test]')) {
       for (const b of card.querySelectorAll('.verdict button')) {
         b.onclick = () => {
-          card.querySelectorAll('.verdict button').forEach((x) => x.classList.toggle('on', x === b));
-          verdicts[card.dataset.test] = b.dataset.v;
-          report();
+          const key = b.dataset.k || card.dataset.test;
+          card.querySelectorAll(`.verdict button${b.dataset.k ? `[data-k="${key}"]` : ':not([data-k])'}`).forEach((x) => x.classList.toggle('on', x === b));
+          set(key, b.dataset.v);
         };
       }
     }
     function report() {
-      const lines = ['Aera save test', `Opened in: ${app}${info.inAppBrowser ? ' (in-app)' : ''}, share sheet: ${info.share}, share photos: ${canShareFiles}`];
-      for (const k of 'ABCDEF') lines.push(`${k}: ${verdicts[k] || '-'}`);
-      lines.push(ua);
-      document.getElementById('out').value = lines.join('\n');
+      const lines = ['Aera save test 2', `Opened in: ${app}${inApp ? ' (in-app)' : ''}`];
+      for (const [k, v] of Object.entries(results)) lines.push(`${k}: ${v}`);
+      lines.push(`screen: ${screen.width}×${screen.height} @${devicePixelRatio}`, ua);
+      $('out').value = lines.join('\n');
     }
     report();
-    document.getElementById('copy').onclick = async () => {
-      const t = document.getElementById('out');
-      try { await navigator.clipboard.writeText(t.value); document.getElementById('copy').textContent = 'Copied'; }
-      catch { t.select(); document.execCommand('copy'); document.getElementById('copy').textContent = 'Copied'; }
+    $('copy').onclick = async () => {
+      const t = $('out');
+      try { await navigator.clipboard.writeText(t.value); } catch { t.select(); document.execCommand('copy'); }
+      $('copy').textContent = 'Copied';
     };
   </script>
 </body>
