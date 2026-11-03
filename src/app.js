@@ -691,9 +691,8 @@ function downloadFile(file) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  if (IN_APP) toast('If it didn’t save, open Aera in your browser — this app’s browser can’t save photos.');
   // Galleries keep downloads in their own album (Samsung Gallery: Albums → Download).
-  else toast(IS_ANDROID ? 'Saved. In your gallery, open the Download album.' : 'Downloaded.');
+  toast(IS_ANDROID ? 'Saved. In your gallery, open the Download album.' : 'Downloaded.');
 }
 
 let toastTimer = 0;
@@ -1093,19 +1092,25 @@ $('tapHint').hidden = hasStarted();
 homeBg = homeBackground($('homeBg'));
 homeBg.setActive(state.screen === 'home');
 
-// Inside Instagram & co. on Android: offer the real browser, and try it once on its own.
-// "intent:" hands the same page to the phone's default browser (it keeps the visit's place).
+// Inside Instagram & co. on Android, a photo made here can't be saved or shared (tested on a
+// Pixel, Nov 2026: downloads ignored or bounced out, no share sheet, Stories can't paste).
+// So home explains why and offers one tap to the phone's own browser, instead of a camera
+// that leads nowhere. No automatic jump: Instagram's "leaving" prompt makes sense only
+// once you know why it's coming. "intent:" hands the page to the default browser.
 if (IN_APP) {
-  const hop = $('openBrowser');
-  hop.href = `intent:${location.origin}${location.pathname}${location.search}#Intent;end`;
+  $('openBrowser').href = `intent:${location.origin}${location.pathname}${location.search}#Intent;end`;
+  const ua = navigator.userAgent;
+  const host = /Instagram/.test(ua) ? 'Instagram' : /Barcelona/.test(ua) ? 'Threads' : /FBAN|FBAV|FB_IAB/.test(ua) ? 'Facebook'
+    : /musical_ly|BytedanceWebview/.test(ua) ? 'TikTok' : /Snapchat/.test(ua) ? 'Snapchat' : /LinkedInApp/.test(ua) ? 'LinkedIn' : null;
+  $('inAppText').textContent = host
+    ? `${host}’s browser can’t save or share photos, so Aera opens in your phone’s browser. When ${host} asks, tap yes.`
+    : 'This app’s browser can’t save or share photos, so Aera opens in your phone’s browser. If you’re asked, tap yes.';
   $('inApp').hidden = false;
-  try {
-    if (!sessionStorage.getItem('aera.hopped')) { sessionStorage.setItem('aera.hopped', '1'); location.href = hop.href; }
-  } catch { /* storage blocked: the button is still there */ }
+  $('home').classList.add('in-app-mode');
 }
 
 // Ask for location as soon as Aera opens, so air + scene are ready when the photo comes back.
-locateHere();
+if (!IN_APP) locateHere(); // inside Instagram & co. the camera is hidden, so no location prompt
 updateGalleryButton();
 
 // Installable app + "Share → Aera" from other apps (see sw.js).

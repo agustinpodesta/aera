@@ -233,6 +233,9 @@ body {
 }
 .in-app p { margin: 0 0 10px; font-size: 13px; color: rgba(242, 237, 228, .9); }
 .in-app .btn { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+.in-app .in-app-title { font: 500 16px var(--mono); color: var(--paper); margin-bottom: 6px; }
+/* In there, the camera would lead to a photo you can't save: the browser button replaces it */
+.in-app-mode .camera-bar, .in-app-mode .home-alt { display: none; }
 
 /* Back from a picked photo: one tap to choose another (a back gesture can't open the picker) */
 .pick-again {

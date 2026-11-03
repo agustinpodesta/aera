@@ -20,15 +20,6 @@
           "value": "camera=(self), geolocation=(self), microphone=()"
         }
       ]
-    },
-    {
-      "source": "/media/igtest/c.jpg",
-      "headers": [
-        {
-          "key": "Content-Disposition",
-          "value": "attachment; filename=\"aera-test-C.jpg\""
-        }
-      ]
     }
   ]
 }
