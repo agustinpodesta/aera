@@ -166,3 +166,9 @@ All queried by coordinates (never city names): place names only find coordinates
 - [x] Home clips: at most one skip per 3 s and none while offline (a network drop could cycle every clip in milliseconds); cancelled loads are not errors
 - Measured on desktop: drag 60 fps (17 ms frames), no long tasks; preview opens in ~75 ms. Not yet measured on the Pixel
 
+
+## Instagram link & Samsung saves (Nov 3 2026)
+- [x] Share/Download buttons decided when Aera opens (a test file asks the browser if it can share), so they no longer flip from "Share" to "Download" once the photo is ready (seen via the Instagram link)
+- [x] Opened inside Instagram/Facebook/Threads/TikTok's own browser on Android (no share sheet; saving a photo made on the page usually fails silently): home shows "This app's browser can't share or save your photos · Open in your browser", and Aera tries the hop once by itself (`intent:` link → the phone's default browser: Chrome, Samsung Internet…). Download there no longer claims "Saved"
+- [x] Android save message now points to the Download album (Samsung Gallery keeps downloads in Albums → Download, not always in the main Pictures tab). A website can't save into the Camera folder
+- [ ] Check on a real phone: Instagram link → hop to browser (Pixel + Samsung); Samsung Gallery shows the download

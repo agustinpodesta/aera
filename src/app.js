@@ -26,6 +26,18 @@ const HISTORY_FROM = Date.UTC(2022, 7, 1); // global model archive starts August
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS reports as a Mac
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
+// Links opened inside Instagram, Facebook, Threads, TikTok… load in that app's own browser.
+// On Android it has no share sheet and usually can't save a photo made on the page, so
+// Aera offers a one-tap hop to the phone's real browser (Chrome, Samsung Internet…).
+const IN_APP = IS_ANDROID
+  && /Instagram|FBAN|FBAV|FB_IAB|Barcelona|musical_ly|BytedanceWebview|Snapchat|LinkedInApp|Line\/|; wv\)/i.test(navigator.userAgent);
+// Whether this browser can hand a photo to the share sheet, known before any photo exists
+// so the buttons are right from the first frame (they used to flip once the file was ready).
+const CAN_SHARE_FILES = (() => {
+  try {
+    return !!navigator.canShare?.({ files: [new File([new Uint8Array([255, 216, 255])], 'aera.jpg', { type: 'image/jpeg' })] });
+  } catch { return false; }
+})();
 
 const $ = (id) => document.getElementById(id);
 const fontsReady = ensureFonts(); // the first render waits for it
@@ -405,9 +417,6 @@ function scheduleExport() {
         const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
         state.file = new File([blob], `aera-${stamp}.jpg`, { type: 'image/jpeg' });
         if (!shot.pending) keepShot(shot, blob);
-        const share = canShareFile(state.file);
-        $('save').textContent = share ? 'Share' : 'Download';
-        $('download').hidden = !share; // with a share sheet, keep a one-tap "save to my photos" too
         if (!dragging) showPreviewImage(blob);
         resolve(state.file);
       }, 'image/jpeg', 0.92);
@@ -682,7 +691,9 @@ function downloadFile(file) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast(IS_ANDROID ? 'Saved to your phone — it’s in your gallery under Downloads.' : 'Downloaded.');
+  if (IN_APP) toast('If it didn’t save, open Aera in your browser — this app’s browser can’t save photos.');
+  // Galleries keep downloads in their own album (Samsung Gallery: Albums → Download).
+  else toast(IS_ANDROID ? 'Saved. In your gallery, open the Download album.' : 'Downloaded.');
 }
 
 let toastTimer = 0;
@@ -1014,9 +1025,6 @@ async function openViewer(id, { push = true } = {}) {
   const file = new File([row.blob], row.name || 'aera.jpg', { type: 'image/jpeg' });
   state.viewer = { id, file, url: URL.createObjectURL(row.blob) };
   $('viewerImg').src = state.viewer.url;
-  const share = canShareFile(file);
-  $('viewerShare').textContent = share ? 'Share' : 'Download';
-  $('viewerSave').hidden = !share;
 }
 
 async function deleteEdited() {
@@ -1057,6 +1065,9 @@ $('pickAgain').addEventListener('click', pickPhoto);
 $('galleryBtn').addEventListener('click', () => openGallery());
 $('viewerShare').addEventListener('click', () => shareFile(state.viewer?.file));
 $('viewerSave').addEventListener('click', () => saveToDevice(state.viewer?.file));
+// Share + a one-tap save where there's a share sheet; a single Download button where there isn't.
+for (const id of ['save', 'viewerShare']) $(id).textContent = CAN_SHARE_FILES ? 'Share' : 'Download';
+for (const id of ['download', 'viewerSave']) $(id).hidden = !CAN_SHARE_FILES;
 for (const id of ['download', 'viewerSave']) $(id).setAttribute('aria-label', IS_IOS ? 'Save to Photos' : 'Save to your gallery');
 $('viewerDelete').addEventListener('click', removeViewed);
 document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => history.back()));
@@ -1081,6 +1092,17 @@ $('tapHint').hidden = hasStarted();
 
 homeBg = homeBackground($('homeBg'));
 homeBg.setActive(state.screen === 'home');
+
+// Inside Instagram & co. on Android: offer the real browser, and try it once on its own.
+// "intent:" hands the same page to the phone's default browser (it keeps the visit's place).
+if (IN_APP) {
+  const hop = $('openBrowser');
+  hop.href = `intent:${location.origin}${location.pathname}${location.search}#Intent;end`;
+  $('inApp').hidden = false;
+  try {
+    if (!sessionStorage.getItem('aera.hopped')) { sessionStorage.setItem('aera.hopped', '1'); location.href = hop.href; }
+  } catch { /* storage blocked: the button is still there */ }
+}
 
 // Ask for location as soon as Aera opens, so air + scene are ready when the photo comes back.
 locateHere();
