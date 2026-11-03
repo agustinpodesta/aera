@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0E0F0D" />
+  <title>About Aera</title>
+  <meta name="description" content="Aera stamps your photos with the air you're breathing. Built by @maangostin." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <style>
+    :root {
+      --night: #0E0F0D; --paper: #F2EDE4; --mute: rgba(242, 237, 228, .66); --hair: rgba(242, 237, 228, .16);
+      --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; --brand: "Syne", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0; background: var(--night); color: var(--paper); font: 15px/1.65 var(--mono);
+      padding: calc(20px + env(safe-area-inset-top)) 20px calc(48px + env(safe-area-inset-bottom));
+    }
+    main { max-width: 34rem; margin: 0 auto; }
+    a { color: inherit; }
+    .back { display: inline-flex; align-items: center; min-height: 44px; color: var(--mute); text-decoration: none; font-size: 14px; }
+    .back:active { opacity: .6; }
+    h1, h2 { font-weight: 500; letter-spacing: .01em; margin: 0 0 20px; }
+    h1 { font-size: 26px; margin-top: 28px; }
+    h2 { font-size: 20px; }
+    p { margin: 0 0 16px; }
+    .lines p { margin-bottom: 12px; }
+    .links { list-style: none; padding: 0; margin: 24px 0 0; }
+    .links li { margin: 6px 0; }
+    .links a { text-decoration: none; }
+    .links a:hover, .links a:focus-visible { text-decoration: underline; }
+    .soon { color: var(--mute); }
+    hr { border: 0; height: 1px; background: var(--hair); margin: 40px 0; }
+    .inspo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; }
+    figure { margin: 0; }
+    figure img { display: block; width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 6px; background: #1A1C19; }
+    figure:first-child img { object-position: 100% 50%; } /* keep the PXLCAM stamp whole */
+    figcaption { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--mute); }
+    figcaption a { color: var(--paper); text-decoration: none; }
+    .ask { color: var(--mute); margin-top: 24px; }
+    .ask + p { font-weight: 500; }
+    footer { margin-top: 48px; text-align: center; color: var(--mute); font-size: 13px; }
+    footer .mark { display: block; font: 800 22px/1 var(--brand); letter-spacing: .06em; color: var(--paper); margin-bottom: 8px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/">← Aera</a>
+
+    <section>
+      <h1>About me</h1>
+      <p>Hi, I’m Agustin.</p>
+      <p>I’m an environmental engineer experimenting with creative tech, currently building small, useful things.</p>
+      <p>I share (or try to, with my not so great social media skills) how I design and experiment with technology, and explain the science behind interesting things.</p>
+      <p>If you want to know more about this project or others that I’ve been working on, I share about them on my other platforms.</p>
+      <ul class="links">
+        <li><a href="https://instagram.com/maangostin" target="_blank" rel="noopener noreferrer">→ Instagram</a></li>
+        <li class="soon">→ Newsletter (coming soon)</li>
+      </ul>
+    </section>
+
+    <hr />
+
+    <section>
+      <h2>The inspiration</h2>
+      <div class="inspo">
+        <figure>
+          <img src="media/about/pxlcam.jpg" alt="A garden photo shot on PXLCAM, stamped with the date and the Climate Clock countdown" loading="lazy" decoding="async" />
+          <figcaption><a href="https://instagram.com/anna.zhang" target="_blank" rel="noopener noreferrer">PXLCAM by @anna.zhang</a>: the Climate Clock on every photo, closer than any headline.</figcaption>
+        </figure>
+        <figure>
+          <img src="media/about/strava.jpg" alt="A runner's Instagram Story with Strava stats: distance, pace and time" loading="lazy" decoding="async" />
+          <figcaption><a href="https://instagram.com/pokemonmasterzo" target="_blank" rel="noopener noreferrer">@pokemonmasterzo</a> on Strava: we love sharing how healthy we are.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <hr />
+
+    <section class="lines">
+      <h2>Why I built this</h2>
+      <p>We love sharing proof that we’re healthy.</p>
+      <p>A run. A pace. A step count.</p>
+      <p>But one thing shaping our health never shows up in those posts: the air we breathe.</p>
+      <p>Air is invisible, so it’s easy to forget.</p>
+      <p>I wanted to make it visible, inside the photos we already take and share.</p>
+      <p>Aera stamps every photo with the air where it was taken, the way Strava stamps a run.</p>
+      <p>A clean-air day becomes something to show off. A bad one becomes something people notice.</p>
+      <p class="ask">A question I keep coming back to:</p>
+      <p>What would change if we could see the air we breathe?</p>
+    </section>
+
+    <footer>
+      <a class="mark" href="/">AERA</a>
+      built by <a href="https://instagram.com/maangostin" target="_blank" rel="noopener noreferrer">@maangostin</a>
+    </footer>
+  </main>
+</body>
+</html>
