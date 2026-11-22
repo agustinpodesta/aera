@@ -22,3 +22,7 @@ npm run dev        # http://localhost:8120 — static pages + /api functions
 - `studio.html` — design studio: try photos × sample readings, IG safe zones, PNG export
 - `samples/` — drop your own test photos here and list their filenames in `samples/samples.json`, e.g. `["street.jpg", "park.jpg"]`
 - `projectplan.md` — milestones and progress
+
+## License
+
+MIT, see `LICENSE`. Reference images in `media/about/` belong to their owners.
